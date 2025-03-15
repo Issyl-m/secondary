@@ -790,12 +790,12 @@ def A(steenrod_operation, list_adem_relation): # TODO: monomial_to_mod_p
     if deg(steenrod_operation) <= 0:
         return Monomial(0, tuple([]), PARAM_FIXED_PRIME)
 
-    bool_mod_3_term_found = False
+    bool_mod_p_term_found = False
     for monomial in list_adem_relation:
-        if monomial.c % 3 == 0:
-            bool_mod_3_term_found = True
+        if monomial.c % PARAM_FIXED_PRIME == 0:
+            bool_mod_p_term_found = True
 
-    if bool_mod_3_term_found:
+    if bool_mod_p_term_found:
         rel = list_adem_relation[0]
         multiple_of_p = Monomial(int(rel.c / PARAM_FIXED_PRIME), rel.monomial, PARAM_FIXED_PRIME)
         return -1 * kristensen_derivation(steenrod_operation) * multiple_of_p # mod p > 2
