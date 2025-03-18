@@ -954,11 +954,94 @@ def milnor_basis(deg):
 
     return r
 
+def milnor_basis_product_diophantine(r_i, depth, prefix=[], acc=0):
+    r = []
 
-def milnor_basis_product(m1, m2):
-    print("UNIMPLEMENTED")
-    return [m1, m2]
+    if acc > r_i:
+        return []
 
+    for i in range(int(r_i / PARAM_FIXED_PRIME**depth) + 1):
+        if depth == 0:
+            x_1 = r_i - sum(
+                [
+                    prefix[i] * PARAM_FIXED_PRIME**(i+1) 
+                    for i in range(len(prefix[1:]))
+                ]
+            )
+            return [-1, x_1] + prefix
+        else:
+            r += milnor_basis_product_diophantine(r_i, depth - 1, prefix=[i] + prefix, acc=acc + PARAM_FIXED_PRIME**depth * i)
+
+    return r
+
+def milnor_basis_product_retrieve_solutions(list_list_sols, depth, prefix=[]):
+    r = []
+
+    if depth == -1:
+        return [-1] + prefix
+
+    list_new_prefix = []
+    bool_first_found = False
+    for val in list_list_sols[depth]:
+        if val != -1:
+            list_new_prefix.append(val)
+        else:
+            if bool_first_found:
+                r += milnor_basis_product_retrieve_solutions(list_list_sols, depth - 1, prefix=list_new_prefix + prefix)
+            
+            list_new_prefix = []
+            bool_first_found = True
+
+    r += milnor_basis_product_retrieve_solutions(list_list_sols, depth - 1, prefix=list_new_prefix + prefix)
+
+    return r
+    
+def milnor_basis_pow_product(m1, m2):
+    R = m1.monomial[1]
+    S = m2.monomial[1]
+
+    M = len(S)
+    N = len(R)
+    
+    matrix_eq = [[0]*((N+1)*M+N) for i in range(M)]
+
+    for i in range(M):
+        for k in range(N + 1):
+            matrix_eq[i][i+(M+1)*k] = 1
+
+    list_list_sols = []
+    for i in range(N):
+        list_sols = milnor_basis_product_diophantine(R[i], M)
+        list_list_sols.append(list_sols)
+
+    list_solutions = milnor_basis_product_retrieve_solutions(list_list_sols, N - 1)
+    
+    len_list_solutions = len(list_solutions)
+    list_complete_solutions = []
+    i = 1
+    k = 0 # matrix_eq row
+    while i <= len_list_solutions:
+        j = i + (N + 1)*M + 1
+
+        list_y = list_solutions[i:j]
+
+        dot_prod = 0
+        for t in range(M):
+            for r in range(len(list_y)):
+                dot_prod += list_y[r] * matrix_eq[t][M + r]
+
+        for t in range(M):
+            if S[t] - dot_prod >= 0:
+                list_complete_solutions.append([0]*t + [S[t] - dot_prod] + [0]*(M - t - 1) + list_y)
+
+        i = j + 1
+        k += 1
+
+    print(matrix_eq)
+    print(list_complete_solutions)
+    print(list_complete_solutions[0][0] + list_complete_solutions[0][1]) # test
+
+    return -1
 
 # TODO: remaining terms
 
@@ -990,6 +1073,9 @@ print("="*120)
 print("Steenrod algebra tests")
 print("="*120)
 
-b = milnor_basis(14)
-print(b)
+# b = milnor_basis(80)
+# print(b)
+# p = milnor_basis_pow_product(Monomial(1, (tuple(), (2,8,4))), Monomial(1, (tuple(), (1,2,3,4,5))))
+p = milnor_basis_pow_product(Monomial(1, (tuple(), (1,))), Monomial(1, (tuple(), (2,))))
+print(p)
 
