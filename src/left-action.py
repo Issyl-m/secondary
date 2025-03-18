@@ -950,7 +950,6 @@ def milnor_basis(deg):
 
         else:
             q_curr = []
-        
 
     return r
 
@@ -964,8 +963,8 @@ def milnor_basis_product_diophantine(r_i, depth, prefix=[], acc=0):
         if depth == 0:
             x_1 = r_i - sum(
                 [
-                    prefix[i] * PARAM_FIXED_PRIME**(i+1) 
-                    for i in range(len(prefix[1:]))
+                    prefix[i] * PARAM_FIXED_PRIME**(i+1)
+                    for i in range(len(prefix))
                 ]
             )
             return [-1, x_1] + prefix
@@ -1000,6 +999,8 @@ def milnor_basis_pow_product(m1, m2):
     R = m1.monomial[1]
     S = m2.monomial[1]
 
+    external_factor = m1.c * m2.c % PARAM_FIXED_PRIME
+
     M = len(S)
     N = len(R)
     
@@ -1015,33 +1016,80 @@ def milnor_basis_pow_product(m1, m2):
         list_list_sols.append(list_sols)
 
     list_solutions = milnor_basis_product_retrieve_solutions(list_list_sols, N - 1)
-    
+
     len_list_solutions = len(list_solutions)
     list_complete_solutions = []
     i = 1
     k = 0 # matrix_eq row
     while i <= len_list_solutions:
-        j = i + (N + 1)*M + 1
+        j = (k + 1) * N*(M + 1) + (k + 1)
 
         list_y = list_solutions[i:j]
-
-        dot_prod = 0
+        
+        bool_valid_solution = True
+        prefix_complete_solution = []
         for t in range(M):
+            dot_prod = 0
             for r in range(len(list_y)):
                 dot_prod += list_y[r] * matrix_eq[t][M + r]
 
-        for t in range(M):
-            if S[t] - dot_prod >= 0:
-                list_complete_solutions.append([0]*t + [S[t] - dot_prod] + [0]*(M - t - 1) + list_y)
+            leading_term = S[t] - dot_prod
+            if leading_term >= 0:
+                prefix_complete_solution.append(leading_term)
+            else:
+                bool_valid_solution = False
+                break
 
+        if bool_valid_solution:
+            list_complete_solutions.append(prefix_complete_solution + list_y)
+            
         i = j + 1
         k += 1
 
-    print(matrix_eq)
-    print(list_complete_solutions)
-    print(list_complete_solutions[0][0] + list_complete_solutions[0][1]) # test. TODO: fix DAP
+    lc_solution = []
 
-    return -1
+    for solution in list_complete_solutions:
+        diagonal_factorial_prod = 1
+        factorial_prod_t_n = 1
+        T = []
+
+        for n in range(1, M + 1):
+            s_range = min(n, N)
+            t_n = 0
+
+            for j in range(s_range + 1):
+                d = solution[n - 1 + j*M]
+
+                t_n += d
+                diagonal_factorial_prod *= factorial(d)
+            
+            factorial_prod_t_n *= factorial(t_n)
+            T.append(t_n)
+
+        for n in range(1, N + 1):
+            s_range = min(M, N - n)
+            t_n = 0
+
+            for j in range(s_range + 1):
+                d = solution[M - 1 + n*(M + 1) + j*M]
+
+                t_n += d
+                diagonal_factorial_prod *= factorial(d)
+            
+            factorial_prod_t_n *= factorial(t_n)
+            T.append(t_n)
+
+        m_coeff = factorial_prod_t_n // diagonal_factorial_prod
+        if m_coeff % PARAM_FIXED_PRIME != 0:
+            lc_solution.append(
+                Monomial(
+                    (external_factor * factorial_prod_t_n // diagonal_factorial_prod) % PARAM_FIXED_PRIME,
+                    (tuple(), tuple(T)),
+                    PARAM_FIXED_PRIME
+                )
+            )
+
+    return lc_solution
 
 # TODO: remaining terms
 
@@ -1075,7 +1123,8 @@ print("="*120)
 
 # b = milnor_basis(80)
 # print(b)
-# p = milnor_basis_pow_product(Monomial(1, (tuple(), (2,8,4))), Monomial(1, (tuple(), (1,2,3,4,5))))
-p = milnor_basis_pow_product(Monomial(1, (tuple(), (1,))), Monomial(1, (tuple(), (2,))))
+
+# p = milnor_basis_pow_product(Monomial(1, (tuple(), (100,5))), Monomial(1, (tuple(), (4,5,6))))
+p = milnor_basis_pow_product(Monomial(1, (tuple(), (1,))), Monomial(2, (tuple(), (3,))))
 print(p)
 
