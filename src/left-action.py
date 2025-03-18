@@ -1039,7 +1039,7 @@ def milnor_basis_pow_product(m1, m2):
 
     print(matrix_eq)
     print(list_complete_solutions)
-    print(list_complete_solutions[0][0] + list_complete_solutions[0][1]) # test
+    print(list_complete_solutions[0][0] + list_complete_solutions[0][1]) # test. TODO: fix debugger
 
     return -1
 
