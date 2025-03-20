@@ -6,6 +6,8 @@ import numpy as np
 
 #from pympler import asizeof # tests 
 import sys # tests
+# import time # tests
+# from sage.all import * # tests
 
 # Constants
 
@@ -973,29 +975,22 @@ def milnor_basis_product_diophantine(r_i, depth, prefix=[], acc=0):
 
     return r
 
-def milnor_basis_product_retrieve_solutions(list_list_sols, depth, prefix=[]):
+def milnor_basis_product_retrieve_solutions(list_list_sols, depth, solution_len, prefix=[]):
     r = []
 
     if depth == -1:
         return [-1] + prefix
 
-    list_new_prefix = []
-    bool_first_found = False
-    for val in list_list_sols[depth]:
-        if val != -1:
-            list_new_prefix.append(val)
-        else:
-            if bool_first_found:
-                r += milnor_basis_product_retrieve_solutions(list_list_sols, depth - 1, prefix=list_new_prefix + prefix)
-            
-            list_new_prefix = []
-            bool_first_found = True
+    list_sols = list_list_sols[depth]
+    for i in range(len(list_sols) // (solution_len + 1)):
+        list_new_prefix = list_sols[i*solution_len + (i + 1):(i + 1)*solution_len + (i + 1)]
 
-    r += milnor_basis_product_retrieve_solutions(list_list_sols, depth - 1, prefix=list_new_prefix + prefix)
+        r += milnor_basis_product_retrieve_solutions(list_list_sols, depth - 1, solution_len, prefix=list_new_prefix + prefix)
 
     return r
     
-def milnor_basis_pow_product(m1, m2):
+def milnor_basis_pow_product(m1, m2): # TODO: this should be an "inline" routine
+    Q = m1.monomial[0]
     R = m1.monomial[1]
     S = m2.monomial[1]
 
@@ -1015,13 +1010,13 @@ def milnor_basis_pow_product(m1, m2):
         list_sols = milnor_basis_product_diophantine(R[i], M)
         list_list_sols.append(list_sols)
 
-    list_solutions = milnor_basis_product_retrieve_solutions(list_list_sols, N - 1)
+    list_solutions = milnor_basis_product_retrieve_solutions(list_list_sols, N - 1, M + 1)
 
     len_list_solutions = len(list_solutions)
     list_complete_solutions = []
     i = 1
     k = 0 # matrix_eq row
-    while i <= len_list_solutions:
+    while i <= len_list_solutions: # TODO: performance (too many entries)
         j = (k + 1) * N*(M + 1) + (k + 1)
 
         list_y = list_solutions[i:j]
@@ -1042,7 +1037,7 @@ def milnor_basis_pow_product(m1, m2):
 
         if bool_valid_solution:
             list_complete_solutions.append(prefix_complete_solution + list_y)
-            
+
         i = j + 1
         k += 1
 
@@ -1084,12 +1079,104 @@ def milnor_basis_pow_product(m1, m2):
             lc_solution.append(
                 Monomial(
                     (external_factor * factorial_prod_t_n // diagonal_factorial_prod) % PARAM_FIXED_PRIME,
-                    (tuple(), tuple(T)),
+                    (Q, tuple(T)),
                     PARAM_FIXED_PRIME
                 )
             )
 
     return lc_solution
+
+def milnor_basis_product(m1, m2):
+    external_factor = m1.c * m2.c % PARAM_FIXED_PRIME
+    if external_factor == 0:
+        return []
+
+    len_R_1 = len(m1.monomial[1])
+    
+    lc_rearranged = [m1]
+    lc_rearranged_new = []
+
+    if len_R_1 > 0: # this part also parses the coefficient part
+        if len(m2.monomial[0]) > 0:
+            for i in m2.monomial[0]:
+                for m in lc_rearranged:
+                    bool_flag_continue = True
+                    j = i
+                    while bool_flag_continue:
+                        Q_part = m.monomial[0] + (j,)
+                        P_part = list(m.monomial[1])
+
+                        if len(P_part) <= j - i - 1:
+                            bool_flag_continue = False
+
+                        if j - i > 0 and bool_flag_continue:
+                            P_part[j - i - 1] -= PARAM_FIXED_PRIME**i
+                            if P_part[j - i - 1] < 0:
+                                bool_flag_continue = False
+
+                        if bool_flag_continue:
+                            lc_rearranged_new.append(
+                                Monomial(
+                                    external_factor,
+                                    (Q_part, tuple(P_part)),
+                                    PARAM_FIXED_PRIME
+                                )
+                            )
+
+                        j += 1
+
+                lc_rearranged = lc_rearranged_new
+                lc_rearranged_new = []
+        else:
+            lc_rearranged[0] = m2.c * m1
+    else:
+        for m in lc_rearranged:
+            m_monomial_Q = list(m.monomial[0])
+            m_monomial_Q += m2.monomial[0]
+            lc_rearranged_new.append(Monomial(m.c * m2.c, (tuple(m_monomial_Q), m.monomial[1]), PARAM_FIXED_PRIME))
+
+        lc_rearranged = lc_rearranged_new
+        lc_rearranged_new = []
+
+    for m in lc_rearranged:
+        sgn = 1
+        Q_sorted = []
+        Q_tmp = list(m.monomial[0])
+        for k in range(len(m.monomial[0])):
+            min_Q_tmp = min(Q_tmp)
+            index_to_remove = Q_tmp.index(min_Q_tmp)
+
+            if len(Q_sorted) > 0:
+                if min_Q_tmp == Q_sorted[-1]:
+                    sgn = 0
+                    break
+
+            Q_sorted.append(min_Q_tmp)
+            Q_tmp.pop(index_to_remove)
+
+            sgn *= (-1)**index_to_remove
+
+        if sgn != 0:
+            m.c *= sgn
+            m.monomial = list(m.monomial)
+            m.monomial[0] = tuple(Q_sorted)
+            m.monomial = tuple(m.monomial)
+            lc_rearranged_new.append(m)
+
+    lc_rearranged = lc_rearranged_new
+    lc_rearranged_new = []
+
+    if len(m2.monomial[1]) > 0:
+        for m in lc_rearranged:
+            lc_rearranged_new += milnor_basis_pow_product(
+                    m,
+                    Monomial(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME) # coeff previously considered
+                )
+
+        lc_rearranged = lc_rearranged_new
+        lc_rearranged_new = []
+
+    return lc_rearranged
 
 # TODO: remaining terms
 
@@ -1125,6 +1212,11 @@ print("="*120)
 # print(b)
 
 # p = milnor_basis_pow_product(Monomial(1, (tuple(), (100,5))), Monomial(1, (tuple(), (4,5,6))))
-p = milnor_basis_pow_product(Monomial(1, (tuple(), (1,))), Monomial(2, (tuple(), (3,))))
-print(p)
+# p = milnor_basis_pow_product(Monomial(1, (tuple(), (29,3,3,3,3)), PARAM_FIXED_PRIME), Monomial(1, (tuple(), (10,3,2)), PARAM_FIXED_PRIME))
+# p = milnor_basis_pow_product(Monomial(1, (tuple(), (300,3,3,3,3))), Monomial(1, (tuple(), (1000,3,2))))
+# p = milnor_basis_pow_product(Monomial(1, (tuple(), (3000,3,3,3,3))), Monomial(2, (tuple(), (1000,3,2))))
+# print(len(p))
 
+p = milnor_basis_product(Monomial(1, ((1, 9), (33, 1)), PARAM_FIXED_PRIME), Monomial(2, ((3,), (10, 3)), PARAM_FIXED_PRIME))
+# p = milnor_basis_product(Monomial(1, (tuple([1,3]), tuple([1])), PARAM_FIXED_PRIME), Monomial(2, (tuple([4]), tuple([1])), PARAM_FIXED_PRIME))
+print(p)
