@@ -6,6 +6,7 @@ import numpy as np
 
 # from pympler import asizeof # tests
 import sys  # tests
+
 # import time # tests
 # from sage.all import * # tests
 
@@ -92,7 +93,10 @@ class TensorProductBasic:
         return self
 
     def __add__(self, other):
-        if self.m1.monomial == other.m1.monomial and self.m2.monomial == other.m2.monomial:
+        if (
+            self.m1.monomial == other.m1.monomial
+            and self.m2.monomial == other.m2.monomial
+        ):
 
             c = self.m1.c * self.m2.c + other.m1.c * other.m2.c
             m1 = (self.m1 + other.m1).monomials[0]
@@ -101,11 +105,7 @@ class TensorProductBasic:
             m1.c = c
             m2.c = 1
 
-            return LinearCombination(
-                [
-                    TensorProductBasic(m1, m2)
-                ]
-            )
+            return LinearCombination([TensorProductBasic(m1, m2)])
         else:
             return LinearCombination([self, other])
 
@@ -129,21 +129,26 @@ class TensorProductBasic:
         c1 = self.m1.c * self.m2.c
         c2 = other.m1.c * other.m2.c
 
-        return (c1.coeffCmp(c1, c2))\
-            and self.m1.monomial == other.m1.monomial \
+        return (
+            (c1.coeffCmp(c1, c2))
+            and self.m1.monomial == other.m1.monomial
             and self.m2.monomial == other.m2.monomial
+        )
 
     def asLinearCombination(self):
         return LinearCombination([self])
 
     def isZero(self):
-        return (self.m1.coeffCmp(self.m1.c * self.m2.c, 0))
+        return self.m1.coeffCmp(self.m1.c * self.m2.c, 0)
 
     def copy(self):
         return TensorProductBasic(self.m1.copy(), self.m2.copy())
 
     def sameGenerator(self, other):
-        return self.m1.monomial == other.m1.monomial and self.m2.monomial == other.m2.monomial
+        return (
+            self.m1.monomial == other.m1.monomial
+            and self.m2.monomial == other.m2.monomial
+        )
 
 
 class LinearCombination:
@@ -200,7 +205,7 @@ class LinearCombination:
                 [
                     other * monomial
                     for monomial in self.monomials
-                    if not (other*monomial).isZero()
+                    if not (other * monomial).isZero()
                 ]
             )
 
@@ -254,7 +259,7 @@ class LinearCombination:
         return LinearCombination([m.copy() for m in self.monomials])
 
     def isEqual(self, other):
-        return (self + (-1)*other).isZero()
+        return (self + (-1) * other).isZero()
 
     def isZero(self):
         if len(self.monomials) == 0:
@@ -281,13 +286,7 @@ class Monomial:
     def __add__(self, other):
         if self.monomial == other.monomial:
             return LinearCombination(
-                [
-                    Monomial(
-                        (self.c + other.c) % self.p_pow,
-                        self.monomial,
-                        self.p_pow
-                    )
-                ]
+                [Monomial((self.c + other.c) % self.p_pow, self.monomial, self.p_pow)]
             )
         else:
             return LinearCombination([self, other])
@@ -296,7 +295,9 @@ class Monomial:
         return Monomial((other * self.c) % self.p_pow, self.monomial, self.p_pow)
 
     def __mul__(self, other):
-        return Monomial((self.c * other.c) % self.p_pow, self.monomial + other.monomial, self.p_pow)
+        return Monomial(
+            (self.c * other.c) % self.p_pow, self.monomial + other.monomial, self.p_pow
+        )
 
     def __str__(self):  # Just for debugging purposes. TODO: Milnor basis.
         if self.isZero():
@@ -305,8 +306,8 @@ class Monomial:
             return str(self.c % self.p_pow)
         str_operations = ""
         for i in range(0, len(self.monomial) >> 1):
-            operation_tag = self.monomial[2*i]
-            operation_exp = self.monomial[2*i + 1]
+            operation_tag = self.monomial[2 * i]
+            operation_exp = self.monomial[2 * i + 1]
 
             if operation_tag == TAG_MONOMIAL_BOCKSTEIN:
                 operation_str = "b"
@@ -347,7 +348,7 @@ class Monomial:
         """INPUT: (c, 'b1 p40 p2 b1')"""
         list_operations = []
 
-        for c in str_operations.split(' '):
+        for c in str_operations.split(" "):
             if c[0] == "b":
                 list_operations.append(TAG_MONOMIAL_BOCKSTEIN)
             elif c[0] == "p":
@@ -368,6 +369,109 @@ class Monomial:
 #####################################################################
 #                           Maps                                    #
 #####################################################################
+
+
+def steenrod_milnor_basis_decompose_positive_deg_partitions(
+    m, R_1, prefix=[], depth=-1
+):
+    r = []
+
+    if depth >= 0:
+        for i in range(2):
+            r += steenrod_milnor_basis_decompose_positive_deg_partitions(
+                m, R_1, prefix=[i == 1] + prefix, depth=depth - 1
+            )
+    else:
+        S = np.array(m.monomial[0])
+        len_S = len(S)
+
+        if len(prefix) > 0:
+            mask_1 = np.array(prefix)
+            mask_2 = np.array([not flag for flag in prefix])
+
+            S_1 = tuple(S[mask_1].tolist())
+            S_2 = tuple(S[mask_2].tolist())
+
+            S = S.tolist()
+        else:
+            S_1 = tuple()
+            S_2 = tuple()
+
+        len_S_1 = len(S_1)
+
+        R_2 = tuple([m.monomial[1][i] - R_1[i] for i in range(len(R_1))])
+
+        sgn = (-1) ** (len(np.trim_zeros(S_1, "b")) * len(np.trim_zeros(S_2, "b")))
+        list_list_permutation_matrix = [[0] * len_S for i in range(len_S)]
+
+        for i in range(len_S):
+            if i < len_S_1:
+                j = S.index(S_1[i])
+            else:
+                j = S.index(S_2[i - len_S_1])
+
+            list_list_permutation_matrix[i][j] = 1
+
+        for i in range(len_S):
+            if list_list_permutation_matrix[i][i] == 0:
+                if i < len_S_1:
+                    j = S.index(S_1[i])
+                else:
+                    j = S.index(S_2[i - len_S_1])
+
+                for k in range(len_S):
+                    tmp_entry = list_list_permutation_matrix[i][k]
+                    list_list_permutation_matrix[i][k] = list_list_permutation_matrix[
+                        j
+                    ][k]
+                    list_list_permutation_matrix[j][k] = tmp_entry
+
+                sgn *= -1  # WARNING: sign convention
+
+        r.append(
+            TensorProductBasic(
+                Monomial(sgn * m.c, (S_1, tuple(R_1)), PARAM_FIXED_PRIME),
+                Monomial(1, (S_2, R_2), PARAM_FIXED_PRIME),
+            )
+        )
+
+    return r
+
+
+def steenrod_milnor_basis_decompose_positive_deg(m, prefix=[], depth=-1):
+    r = []
+
+    if depth > 0:
+        for i in range(m.monomial[1][depth - 1] + 1):
+            r += steenrod_milnor_basis_decompose_positive_deg(
+                m, prefix=[i] + prefix, depth=depth - 1
+            )
+    else:
+        r += steenrod_milnor_basis_decompose_positive_deg_partitions(
+            m, prefix, depth=len(m.monomial[0]) - 1
+        )
+
+    return r
+
+
+@cache
+def steenrod_milnor_basis_decompose(m):  # WARNING: REMOVE
+    r = []
+
+    deg_m = milnor_basis_deg(m)
+    if deg_m == 0:
+        return [
+            TensorProductBasic(
+                Monomial(m.c, (tuple(), tuple()), PARAM_FIXED_PRIME),
+                Monomial(1, (tuple(), tuple()), PARAM_FIXED_PRIME),
+            )
+        ]
+    elif deg_m == -1:
+        return []
+    else:
+        r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[0]))
+
+    return r
 
 
 @cache
@@ -405,13 +509,13 @@ def reduced_diagonal0(linear_comb):
         bool_lc_tensors_init = False
 
         for i in range(len(monomial.monomial) >> 1):
-            operation = monomial.monomial[2*i]
-            exp = monomial.monomial[2*i + 1]
+            operation = monomial.monomial[2 * i]
+            exp = monomial.monomial[2 * i + 1]
 
             if i > 0:
                 c = 1
 
-            decomposition = c*steenrod_decompose(operation, exp)
+            decomposition = c * steenrod_decompose(operation, exp)
 
             if bool_lc_tensors_init:
                 lc_tensors *= decomposition
@@ -423,13 +527,8 @@ def reduced_diagonal0(linear_comb):
 
     sgn_monomial = Monomial(-1, tuple([])).asLinearCombination()
     r.append(
-        TensorProduct(
-            sgn_monomial, linear_comb
-        )
-        +
-        TensorProduct(
-            linear_comb, sgn_monomial
-        )
+        TensorProduct(sgn_monomial, linear_comb)
+        + TensorProduct(linear_comb, sgn_monomial)
     )
 
     return sum(r)
@@ -463,25 +562,25 @@ def mod_p_adem_relation(a, b, type):
 
     list_operations = []
 
-    sum_upper_i = int(a/PARAM_FIXED_PRIME)
+    sum_upper_i = int(a / PARAM_FIXED_PRIME)
 
     if type == 0:
         list_operations.append(
             Monomial(
-                2,
-                (TAG_MONOMIAL_POWER, a, TAG_MONOMIAL_POWER, b)
+                2, (TAG_MONOMIAL_POWER, a, TAG_MONOMIAL_POWER, b)
             ).asLinearCombination()
         )
 
         for i in range(1, sum_upper_i):
             list_operations.append(
-                (-1)**(a+i) * bin_coeff(
+                (-1) ** (a + i)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i)-1,
-                    a-PARAM_FIXED_PRIME*i
-                ) * Monomial(
-                    1,
-                    (TAG_MONOMIAL_POWER, a + b - i, TAG_MONOMIAL_POWER, i)
+                    (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                    a - PARAM_FIXED_PRIME * i,
+                )
+                * Monomial(
+                    1, (TAG_MONOMIAL_POWER, a + b - i, TAG_MONOMIAL_POWER, i)
                 ).asLinearCombination()
             )
 
@@ -492,46 +591,61 @@ def mod_p_adem_relation(a, b, type):
 
         i = 0
         list_operations.append(
-            (-1)**(a+i) * bin_coeff(
+            (-1) ** (a + i)
+            * bin_coeff(
                 PARAM_FIXED_PRIME,
-                (PARAM_FIXED_PRIME-1)*(b-i)-1,
-                a-PARAM_FIXED_PRIME*i) * Monomial(
-                    1,
-                    (TAG_MONOMIAL_POWER, a + b)
-            ).asLinearCombination()
+                (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                a - PARAM_FIXED_PRIME * i,
+            )
+            * Monomial(1, (TAG_MONOMIAL_POWER, a + b)).asLinearCombination()
         )
         i = sum_upper_i
         if sum_upper_i > 0:
             list_operations.append(
-                (-1)**(a+i) * bin_coeff(
+                (-1) ** (a + i)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i)-1,
-                    a-PARAM_FIXED_PRIME*i
-                ) * Monomial(
+                    (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                    a - PARAM_FIXED_PRIME * i,
+                )
+                * Monomial(
                     1,
-                    tuple([TAG_MONOMIAL_POWER, a + b -
-                          sum_upper_i] + list_extra_term)
+                    tuple([TAG_MONOMIAL_POWER, a + b - sum_upper_i] + list_extra_term),
                 ).asLinearCombination()
             )
     else:
         list_operations.append(
             Monomial(
                 2,
-                (TAG_MONOMIAL_POWER, a, TAG_MONOMIAL_BOCKSTEIN,
-                 1, TAG_MONOMIAL_POWER, b)
+                (
+                    TAG_MONOMIAL_POWER,
+                    a,
+                    TAG_MONOMIAL_BOCKSTEIN,
+                    1,
+                    TAG_MONOMIAL_POWER,
+                    b,
+                ),
             ).asLinearCombination()
         )
 
         for i in range(1, sum_upper_i):
             list_operations.append(
-                (-1)**(a+i) * bin_coeff(
+                (-1) ** (a + i)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i),
-                    a-PARAM_FIXED_PRIME*i
-                ) * Monomial(
+                    (PARAM_FIXED_PRIME - 1) * (b - i),
+                    a - PARAM_FIXED_PRIME * i,
+                )
+                * Monomial(
                     1,
-                    (TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER,
-                     a + b - i, TAG_MONOMIAL_POWER, i)
+                    (
+                        TAG_MONOMIAL_BOCKSTEIN,
+                        1,
+                        TAG_MONOMIAL_POWER,
+                        a + b - i,
+                        TAG_MONOMIAL_POWER,
+                        i,
+                    ),
                 ).asLinearCombination()
             )
 
@@ -542,43 +656,56 @@ def mod_p_adem_relation(a, b, type):
 
         i = 0
         list_operations.append(
-            (-1)**(a+i) * bin_coeff(
+            (-1) ** (a + i)
+            * bin_coeff(
                 PARAM_FIXED_PRIME,
-                (PARAM_FIXED_PRIME-1)*(b-i),
-                (a-PARAM_FIXED_PRIME*i)
-            ) * Monomial(
-                1,
-                (TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER, a + b - i)
+                (PARAM_FIXED_PRIME - 1) * (b - i),
+                (a - PARAM_FIXED_PRIME * i),
+            )
+            * Monomial(
+                1, (TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER, a + b - i)
             ).asLinearCombination()
         )
         i = sum_upper_i
         if sum_upper_i > 0:
             list_operations.append(
-                (-1)**(a+i) * bin_coeff(
+                (-1) ** (a + i)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i),
-                    (a-PARAM_FIXED_PRIME*i)
-                ) * Monomial(
+                    (PARAM_FIXED_PRIME - 1) * (b - i),
+                    (a - PARAM_FIXED_PRIME * i),
+                )
+                * Monomial(
                     1,
-                    tuple([TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER,
-                           a + b - i] + list_extra_term)
+                    tuple(
+                        [TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER, a + b - i]
+                        + list_extra_term
+                    ),
                 ).asLinearCombination()
             )
 
         #######
 
-        sum_upper_i = int((a-1)/PARAM_FIXED_PRIME)
+        sum_upper_i = int((a - 1) / PARAM_FIXED_PRIME)
 
         for i in range(1, sum_upper_i):
             list_operations.append(
-                (-1)**(a+i-1) * bin_coeff(
+                (-1) ** (a + i - 1)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i) - 1,
-                    a - PARAM_FIXED_PRIME * i - 1
-                ) * Monomial(
+                    (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                    a - PARAM_FIXED_PRIME * i - 1,
+                )
+                * Monomial(
                     1,
-                    (TAG_MONOMIAL_POWER, a + b - i,
-                     TAG_MONOMIAL_BOCKSTEIN, 1, TAG_MONOMIAL_POWER, i)
+                    (
+                        TAG_MONOMIAL_POWER,
+                        a + b - i,
+                        TAG_MONOMIAL_BOCKSTEIN,
+                        1,
+                        TAG_MONOMIAL_POWER,
+                        i,
+                    ),
                 ).asLinearCombination()
             )
 
@@ -589,26 +716,31 @@ def mod_p_adem_relation(a, b, type):
 
         i = 0
         list_operations.append(
-            (-1)**(a+i-1) * bin_coeff(
+            (-1) ** (a + i - 1)
+            * bin_coeff(
                 PARAM_FIXED_PRIME,
-                (PARAM_FIXED_PRIME-1)*(b-i) - 1,
-                a - PARAM_FIXED_PRIME * i - 1
-            ) * Monomial(
-                1,
-                (TAG_MONOMIAL_POWER, a + b - i, TAG_MONOMIAL_BOCKSTEIN, 1)
+                (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                a - PARAM_FIXED_PRIME * i - 1,
+            )
+            * Monomial(
+                1, (TAG_MONOMIAL_POWER, a + b - i, TAG_MONOMIAL_BOCKSTEIN, 1)
             ).asLinearCombination()
         )
         i = sum_upper_i
         if sum_upper_i > 0:
             list_operations.append(
-                (-1)**(a+i-1) * bin_coeff(
+                (-1) ** (a + i - 1)
+                * bin_coeff(
                     PARAM_FIXED_PRIME,
-                    (PARAM_FIXED_PRIME-1)*(b-i) - 1,
-                    a - PARAM_FIXED_PRIME * i - 1
-                ) * Monomial(
+                    (PARAM_FIXED_PRIME - 1) * (b - i) - 1,
+                    a - PARAM_FIXED_PRIME * i - 1,
+                )
+                * Monomial(
                     1,
-                    tuple([TAG_MONOMIAL_POWER, a + b - i,
-                           TAG_MONOMIAL_BOCKSTEIN, 1] + list_extra_term)
+                    tuple(
+                        [TAG_MONOMIAL_POWER, a + b - i, TAG_MONOMIAL_BOCKSTEIN, 1]
+                        + list_extra_term
+                    ),
                 ).asLinearCombination()
             )
 
@@ -624,20 +756,32 @@ def extract_R_B_element(monomial):
     m = monomial.monomial
 
     if len(m) >= 6:
-        if m[0] == TAG_MONOMIAL_POWER and m[2] == TAG_MONOMIAL_BOCKSTEIN and m[4] == TAG_MONOMIAL_POWER:
-            if m[1] <= PARAM_FIXED_PRIME*m[5]:
+        if (
+            m[0] == TAG_MONOMIAL_POWER
+            and m[2] == TAG_MONOMIAL_BOCKSTEIN
+            and m[4] == TAG_MONOMIAL_POWER
+        ):
+            if m[1] <= PARAM_FIXED_PRIME * m[5]:
                 return (m[1], m[5], 1)
-        elif m[0] == TAG_MONOMIAL_BOCKSTEIN and m[2] == TAG_MONOMIAL_POWER and m[4] == TAG_MONOMIAL_POWER:
-            if m[3] < PARAM_FIXED_PRIME*m[5]:
+        elif (
+            m[0] == TAG_MONOMIAL_BOCKSTEIN
+            and m[2] == TAG_MONOMIAL_POWER
+            and m[4] == TAG_MONOMIAL_POWER
+        ):
+            if m[3] < PARAM_FIXED_PRIME * m[5]:
                 return (m[3], m[5], 2)
         # TODO: (possibly) unreachable
-        elif m[0] == TAG_MONOMIAL_POWER and m[2] == TAG_MONOMIAL_POWER and m[4] == TAG_MONOMIAL_BOCKSTEIN:
-            if m[1] < PARAM_FIXED_PRIME*m[3]:
+        elif (
+            m[0] == TAG_MONOMIAL_POWER
+            and m[2] == TAG_MONOMIAL_POWER
+            and m[4] == TAG_MONOMIAL_BOCKSTEIN
+        ):
+            if m[1] < PARAM_FIXED_PRIME * m[3]:
                 return (m[1], m[3], 3)  # WARNING: unimplemented
 
     if len(m) >= 4:
         if m[0] == TAG_MONOMIAL_POWER and m[2] == TAG_MONOMIAL_POWER:
-            if m[1] < PARAM_FIXED_PRIME*m[3]:
+            if m[1] < PARAM_FIXED_PRIME * m[3]:
                 return (m[1], m[3], 0)
 
     return RET_ERR
@@ -655,11 +799,12 @@ def reduced_diagonal0_image_simplify(lc_img, left_or_right):
         else:
             current_monomial = monomial.m2
 
-        if (monomial.m1.c * monomial.m2.c) % PARAM_FIXED_PRIME == 0 and monomial.m1.c * monomial.m2.c != 0:
+        if (
+            monomial.m1.c * monomial.m2.c
+        ) % PARAM_FIXED_PRIME == 0 and monomial.m1.c * monomial.m2.c != 0:
             clean_elements.append(monomial)
             # output_list.append([monomial, monomial, left_or_right])
-            output_list.append(
-                [monomial.asLinearCombination(), MULTIPLE_OF_FIXED_P])
+            output_list.append([monomial.asLinearCombination(), MULTIPLE_OF_FIXED_P])
             continue
 
         r = extract_R_B_element(current_monomial)
@@ -677,19 +822,15 @@ def reduced_diagonal0_image_simplify(lc_img, left_or_right):
             else:
                 relation_type = r[2]
 
-            for m_rel in mod_p_adem_relation(
-                r[0], r[1], relation_type
-            ).monomials:
+            for m_rel in mod_p_adem_relation(r[0], r[1], relation_type).monomials:
 
                 if bool_first_term:
-                    k = ((PARAM_FIXED_PRIME**2+1) >> 1) * \
-                        current_monomial.c
+                    k = ((PARAM_FIXED_PRIME**2 + 1) >> 1) * current_monomial.c
 
                 m_rel.c = k * m_rel.c
 
                 if r[2] == 2:
-                    m_rel_tmp = Monomial(
-                        1, (TAG_MONOMIAL_BOCKSTEIN, 1)) * m_rel
+                    m_rel_tmp = Monomial(1, (TAG_MONOMIAL_BOCKSTEIN, 1)) * m_rel
                 else:
                     m_rel_tmp = m_rel
 
@@ -707,7 +848,8 @@ def reduced_diagonal0_image_simplify(lc_img, left_or_right):
 
             # output_list.append([LinearCombination(adem_relation_list_tensor), monomial, left_or_right])
             output_list.append(
-                [LinearCombination(adem_relation_list_tensor), left_or_right])
+                [LinearCombination(adem_relation_list_tensor), left_or_right]
+            )
 
     tmp_img = lc_img.copy()
     remaining_elements = tmp_img.copy()
@@ -726,18 +868,17 @@ def rearrange_img_diag0(lc_img):
     pending_sum = lc_img.copy()
 
     while True:
-        clean_output, pending_sum, = reduced_diagonal0_image_simplify(
-            pending_sum, 0
-        )
+        (
+            clean_output,
+            pending_sum,
+        ) = reduced_diagonal0_image_simplify(pending_sum, 0)
 
         r += clean_output
 
         if pending_sum.isZero():
             break
 
-        clean_output, pending_sum = reduced_diagonal0_image_simplify(
-            pending_sum, 1
-        )
+        clean_output, pending_sum = reduced_diagonal0_image_simplify(pending_sum, 1)
 
         r += clean_output
 
@@ -759,13 +900,13 @@ def deg(monomial):
     r = 0
 
     for i in range(0, len(monomial.monomial) >> 1):
-        op = monomial.monomial[2*i]
-        exp = monomial.monomial[2*i + 1]
+        op = monomial.monomial[2 * i]
+        exp = monomial.monomial[2 * i + 1]
 
         if op == TAG_MONOMIAL_BOCKSTEIN:
             r += 1
         else:
-            r += 2*exp*(PARAM_FIXED_PRIME-1)
+            r += 2 * exp * (PARAM_FIXED_PRIME - 1)
 
     return r
 
@@ -775,7 +916,7 @@ def st_mult(m1, m2, basis=TAG_MILNOR_BASIS):
         return milnor_basis_product(m1, m2)
 
 
-def kristensen_derivation(steenrod_operation):
+def kristensen_derivation(steenrod_operation):  # TODO: Milnor basis version (easy)
     """INPUT: \\beta, P^i and constants"""
     if deg(steenrod_operation) <= 0:
         return steenrod_operation
@@ -807,17 +948,19 @@ def A(steenrod_operation, list_adem_relation):  # TODO: monomial_to_mod_p
     if bool_mod_p_term_found:
         rel = list_adem_relation[0]
         multiple_of_p = Monomial(
-            int(rel.c / PARAM_FIXED_PRIME), rel.monomial, PARAM_FIXED_PRIME)
+            int(rel.c / PARAM_FIXED_PRIME), rel.monomial, PARAM_FIXED_PRIME
+        )
         # mod p > 2
         return -1 * kristensen_derivation(steenrod_operation) * multiple_of_p
 
     return -1  # TODO: unimplemented, recursion
 
 
-def A_aux(st_operation_mod_p2, list_list_relations):
-    st_operation = monomial_to_mod_p(st_operation_mod_p2)
-    st_dec = steenrod_decompose(
-        st_operation.monomial[0], st_operation.monomial[1], PARAM_FIXED_PRIME)
+def A_aux(st_operation_mod_p_2, list_list_relations):
+    st_operation = monomial_to_mod_p(st_operation_mod_p_2)
+    st_dec = steenrod_decompose(  # TODO: change to Milnor basis implementation
+        st_operation.monomial[0], st_operation.monomial[1], PARAM_FIXED_PRIME
+    )
 
     for list_relation in list_list_relations:
         rel = list_relation[0]
@@ -832,10 +975,10 @@ def A_aux(st_operation_mod_p2, list_list_relations):
 
                 list_img.append(
                     TensorProductBasic(
-                        (-1)**(deg(dec_monomial.m2) * rel_deg) *
-                        A(dec_monomial.m1, rel_adem_part),
+                        (-1) ** (deg(dec_monomial.m2) * rel_deg)
+                        * A(dec_monomial.m1, rel_adem_part),
                         # TODO: convert to mod p (rel_non_adem_part)
-                        st_mult(dec_monomial.m2, rel_non_adem_part)
+                        st_mult(dec_monomial.m2, rel_non_adem_part),
                     )
                 )
 
@@ -848,6 +991,7 @@ def A_aux(st_operation_mod_p2, list_list_relations):
 
 
 # Steenrod algebra routines
+
 
 def milnor_basis_deg(monomial):
     """INPUT: Monomial(1, (tuple([]),tuple([])), PARAM_FIXED_PRIME)"""
@@ -863,10 +1007,10 @@ def milnor_basis_deg(monomial):
     p_tuple = monomial.monomial[1]
 
     for q_index in q_tuple:
-        r += 2*PARAM_FIXED_PRIME**q_index - 1
+        r += 2 * PARAM_FIXED_PRIME**q_index - 1
 
     for i in range(len(p_tuple)):
-        r += p_tuple[i] * (2*PARAM_FIXED_PRIME**(i+1) - 2)
+        r += p_tuple[i] * (2 * PARAM_FIXED_PRIME ** (i + 1) - 2)
 
     return r
 
@@ -877,7 +1021,7 @@ def all_Q_j(deg, prefix=[]):
     if deg == 0:
         return prefix + [-1]
 
-    upper_bound = int(np.emath.logn(PARAM_FIXED_PRIME, (deg+1) >> 1))
+    upper_bound = int(np.emath.logn(PARAM_FIXED_PRIME, (deg + 1) >> 1))
 
     if len(prefix) > 0:
         lower_bound = prefix[-1] + 1
@@ -893,7 +1037,7 @@ def all_Q_j(deg, prefix=[]):
             return prefix + [-1]
 
     for i in range(lower_bound, upper_bound + 1):
-        r += all_Q_j(deg - (2*PARAM_FIXED_PRIME**i-1), prefix=prefix + [i])
+        r += all_Q_j(deg - (2 * PARAM_FIXED_PRIME**i - 1), prefix=prefix + [i])
 
     return r
 
@@ -906,14 +1050,17 @@ def all_P_r(deg, prefix=[], depth=1):
     elif deg < 0:
         return -1
 
-    if 2*PARAM_FIXED_PRIME**depth - 2 > deg:
+    if 2 * PARAM_FIXED_PRIME**depth - 2 > deg:
         return -1
 
-    num_iterations = int(deg / (2*PARAM_FIXED_PRIME**depth - 2))
+    num_iterations = int(deg / (2 * PARAM_FIXED_PRIME**depth - 2))
 
     for i in range(0, num_iterations + 1):
-        output = all_P_r(deg - i*(2*PARAM_FIXED_PRIME**depth - 2),
-                         prefix=prefix + [i], depth=depth+1)
+        output = all_P_r(
+            deg - i * (2 * PARAM_FIXED_PRIME**depth - 2),
+            prefix=prefix + [i],
+            depth=depth + 1,
+        )
         if output != -1:
             r += output
 
@@ -947,8 +1094,9 @@ def milnor_basis(deg):
 
             q_truncations.add(tuple(q_curr))
 
-            q_deg = milnor_basis_deg(Monomial(1, (tuple(q_curr), tuple(
-                [])), PARAM_FIXED_PRIME))  # TODO: avoid new object
+            q_deg = milnor_basis_deg(
+                Monomial(1, (tuple(q_curr), tuple([])), PARAM_FIXED_PRIME)
+            )  # TODO: avoid new object
 
             if q_deg == deg:
                 r.append((tuple(q_curr), tuple([])))
@@ -982,20 +1130,23 @@ def milnor_basis_product_diophantine(r_i, depth, prefix=[], acc=0):
     for i in range(int(r_i / PARAM_FIXED_PRIME**depth) + 1):
         if depth == 0:
             x_1 = r_i - sum(
-                [
-                    prefix[i] * PARAM_FIXED_PRIME**(i+1)
-                    for i in range(len(prefix))
-                ]
+                [prefix[i] * PARAM_FIXED_PRIME ** (i + 1) for i in range(len(prefix))]
             )
             return [-1, x_1] + prefix
         else:
             r += milnor_basis_product_diophantine(
-                r_i, depth - 1, prefix=[i] + prefix, acc=acc + PARAM_FIXED_PRIME**depth * i)
+                r_i,
+                depth - 1,
+                prefix=[i] + prefix,
+                acc=acc + PARAM_FIXED_PRIME**depth * i,
+            )
 
     return r
 
 
-def milnor_basis_product_retrieve_solutions(list_list_sols, depth, solution_len, prefix=[]):
+def milnor_basis_product_retrieve_solutions(
+    list_list_sols, depth, solution_len, prefix=[]
+):
     r = []
 
     if depth == -1:
@@ -1003,11 +1154,13 @@ def milnor_basis_product_retrieve_solutions(list_list_sols, depth, solution_len,
 
     list_sols = list_list_sols[depth]
     for i in range(len(list_sols) // (solution_len + 1)):
-        list_new_prefix = list_sols[i*solution_len +
-                                    (i + 1):(i + 1)*solution_len + (i + 1)]
+        list_new_prefix = list_sols[
+            i * solution_len + (i + 1) : (i + 1) * solution_len + (i + 1)
+        ]
 
         r += milnor_basis_product_retrieve_solutions(
-            list_list_sols, depth - 1, solution_len, prefix=list_new_prefix + prefix)
+            list_list_sols, depth - 1, solution_len, prefix=list_new_prefix + prefix
+        )
 
     return r
 
@@ -1023,11 +1176,11 @@ def milnor_basis_pow_product(m1, m2):
     M = len(S)
     N = len(R)
 
-    matrix_eq = [[0]*((N+1)*M+N) for i in range(M)]
+    matrix_eq = [[0] * ((N + 1) * M + N) for i in range(M)]
 
     for i in range(M):
         for k in range(N + 1):
-            matrix_eq[i][i+(M+1)*k] = 1
+            matrix_eq[i][i + (M + 1) * k] = 1
 
     list_list_sols = []
     for i in range(N):
@@ -1035,14 +1188,15 @@ def milnor_basis_pow_product(m1, m2):
         list_list_sols.append(list_sols)
 
     list_solutions = milnor_basis_product_retrieve_solutions(
-        list_list_sols, N - 1, M + 1)
+        list_list_sols, N - 1, M + 1
+    )
 
     len_list_solutions = len(list_solutions)
     list_complete_solutions = []
     i = 1
     k = 0  # matrix_eq row
     while i <= len_list_solutions:  # TODO: performance (too many entries)
-        j = (k + 1) * N*(M + 1) + (k + 1)
+        j = (k + 1) * N * (M + 1) + (k + 1)
 
         list_y = list_solutions[i:j]
 
@@ -1078,7 +1232,7 @@ def milnor_basis_pow_product(m1, m2):
             t_n = 0
 
             for j in range(s_range + 1):
-                d = solution[n - 1 + j*M]
+                d = solution[n - 1 + j * M]
 
                 t_n += d
                 diagonal_factorial_prod *= factorial(d)
@@ -1091,7 +1245,7 @@ def milnor_basis_pow_product(m1, m2):
             t_n = 0
 
             for j in range(s_range + 1):
-                d = solution[M - 1 + n*(M + 1) + j*M]
+                d = solution[M - 1 + n * (M + 1) + j * M]
 
                 t_n += d
                 diagonal_factorial_prod *= factorial(d)
@@ -1103,10 +1257,10 @@ def milnor_basis_pow_product(m1, m2):
         if m_coeff % PARAM_FIXED_PRIME != 0:
             lc_solution.append(
                 Monomial(
-                    (external_factor * factorial_prod_t_n //
-                     diagonal_factorial_prod) % PARAM_FIXED_PRIME,
+                    (external_factor * factorial_prod_t_n // diagonal_factorial_prod)
+                    % PARAM_FIXED_PRIME,
                     (Q, tuple(T)),
-                    PARAM_FIXED_PRIME
+                    PARAM_FIXED_PRIME,
                 )
             )
 
@@ -1146,7 +1300,7 @@ def milnor_basis_product(m1, m2):
                                 Monomial(
                                     external_factor,
                                     (Q_part, tuple(P_part)),
-                                    PARAM_FIXED_PRIME
+                                    PARAM_FIXED_PRIME,
                                 )
                             )
 
@@ -1161,7 +1315,10 @@ def milnor_basis_product(m1, m2):
             m_monomial_Q = list(m.monomial[0])
             m_monomial_Q += m2.monomial[0]
             lc_rearranged_new.append(
-                Monomial(m.c * m2.c, (tuple(m_monomial_Q), m.monomial[1]), PARAM_FIXED_PRIME))
+                Monomial(
+                    m.c * m2.c, (tuple(m_monomial_Q), m.monomial[1]), PARAM_FIXED_PRIME
+                )
+            )
 
         lc_rearranged = lc_rearranged_new
         lc_rearranged_new = []
@@ -1182,7 +1339,7 @@ def milnor_basis_product(m1, m2):
             Q_sorted.append(min_Q_tmp)
             Q_tmp.pop(index_to_remove)
 
-            sgn *= (-1)**index_to_remove
+            sgn *= (-1) ** index_to_remove
 
         if sgn != 0:
             m.c *= sgn
@@ -1199,13 +1356,14 @@ def milnor_basis_product(m1, m2):
             lc_rearranged_new += milnor_basis_pow_product(
                 m,
                 # coeff previously considered
-                Monomial(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME)
+                Monomial(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME),
             )
 
         lc_rearranged = lc_rearranged_new
         lc_rearranged_new = []
 
     return lc_rearranged
+
 
 # TODO: remaining terms
 
@@ -1214,7 +1372,7 @@ def milnor_basis_product(m1, m2):
 #####################################################################
 
 
-print("="*120)
+print("=" * 120)
 
 # r = reduced_diagonal0(mod_p_adem_relation(29, 20, 0))
 # r = reduced_diagonal0(mod_p_adem_relation(75, 25, 1)) # ~10 min
@@ -1225,18 +1383,28 @@ print(len(r.monomials))
 
 rearranged = rearrange_img_diag0(r)
 print(rearranged[0])
-print("="*120)
+print("=" * 120)
 print(rearranged[1])
-print("="*120)
+print("=" * 120)
 print("Rearrangement ok.")
 
 ## Sketch ##
 
-# print(A_aux(Monomial.str2monomial(1, "b1"), rearranged[0]))
+m = Monomial(1, (tuple([1, 2]), tuple([1])), PARAM_FIXED_PRIME)
+r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[1]))
+for k in r:
+    print(
+        f"{k.m1.c} Q{k.m1.monomial[0]} P{k.m1.monomial[1]} # Q{k.m2.monomial[0]} P{k.m2.monomial[1]}"
+    )
+sys.exit()
 
-print("="*120)
-print("Steenrod algebra tests")
-print("="*120)
+r = steenrod_milnor_basis_decompose(Monomial(1, ((0,), tuple()), PARAM_FIXED_PRIME))
+print(r)
+# print(A_aux(Monomial(1, ((0,), tuple()), PARAM_FIXED_PRIME), rearranged[0]))
+
+# print("="*120)
+# print("Steenrod algebra tests")
+# print("="*120)
 
 # b = milnor_basis(80)
 # print(b)
@@ -1247,7 +1415,7 @@ print("="*120)
 # p = milnor_basis_pow_product(Monomial(1, (tuple(), (3000,3,3,3,3))), Monomial(2, (tuple(), (1000,3,2))))
 # print(len(p))
 
-p = milnor_basis_product(Monomial(1, ((1, 9), (33, 1)), PARAM_FIXED_PRIME),
-                         Monomial(2, ((3,), (10, 3)), PARAM_FIXED_PRIME))
+# p = milnor_basis_product(Monomial(1, ((1, 9), (33, 1)), PARAM_FIXED_PRIME),
+#                          Monomial(2, ((3,), (10, 3)), PARAM_FIXED_PRIME))
 # p = milnor_basis_product(Monomial(1, (tuple([1,3]), tuple([1])), PARAM_FIXED_PRIME), Monomial(2, (tuple([4]), tuple([1])), PARAM_FIXED_PRIME))
-print(p)
+# print(p)
