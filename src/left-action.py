@@ -13,6 +13,7 @@ import sys  # tests
 # Constants
 
 TAG_MILNOR_BASIS = 0
+TAG_SERRE_CARTAN_BASIS = 1
 TAG_MONOMIAL_CONSTANT = 0
 TAG_MONOMIAL_BOCKSTEIN = 1
 TAG_MONOMIAL_POWER = 2
@@ -115,7 +116,10 @@ class TensorProductBasic:
         return r
 
     def __mul__(self, other):
-        return TensorProductBasic(self.m1 * other.m1, self.m2 * other.m2)
+        return TensorProductBasic(  # WARNING: degree notion
+            (-1) ** (deg(self.m2) * deg(other.m1)) * self.m1 * other.m1,
+            self.m2 * other.m2,
+        )
 
     def __str__(self):
         if self.m1.isZero() or self.m2.isZero():
@@ -276,12 +280,13 @@ class LinearCombination:
 
 
 class Monomial:
-    """Generic A, B_0 monomial"""
+    """Generic Steenrod Algebra/B_0 monomial"""
 
     def __init__(self, coeff, tuple_pow_operations, prime_power=PARAM_FIXED_PRIME**2):
         self.c = coeff
         self.monomial = tuple_pow_operations
         self.p_pow = prime_power
+        self.basis = TAG_SERRE_CARTAN_BASIS
 
     def __add__(self, other):
         if self.monomial == other.monomial:
@@ -299,7 +304,10 @@ class Monomial:
             (self.c * other.c) % self.p_pow, self.monomial + other.monomial, self.p_pow
         )
 
-    def __str__(self):  # Just for debugging purposes. TODO: Milnor basis.
+    def __hash__(self):
+        return hash(str(self))
+
+    def __str__(self):
         if self.isZero():
             return "0"
         if len(self.monomial) == 0:
@@ -366,6 +374,85 @@ class Monomial:
         return Monomial.str2monomial(coeff, str_operations, p_pow).asLinearCombination()
 
 
+class MonomialMilnorBasis:
+    """Generic Steenrod Algebra monomial"""
+
+    def __init__(self, coeff, tuple_pow_operations, prime_power=PARAM_FIXED_PRIME):
+        self.c = coeff
+        self.monomial = (
+            np.trim_zeros(tuple_pow_operations[0], "b"),
+            np.trim_zeros(tuple_pow_operations[1], "b"),
+        )
+        self.p_pow = prime_power
+        self.basis = TAG_MILNOR_BASIS
+
+    def __add__(self, other):
+        if self.monomial == other.monomial:
+            return LinearCombination(
+                [
+                    MonomialMilnorBasis(
+                        (self.c + other.c) % self.p_pow, self.monomial, self.p_pow
+                    )
+                ]
+            )
+        else:
+            return LinearCombination([self, other])
+
+    def __rmul__(self, other):
+        return MonomialMilnorBasis(
+            (other * self.c) % self.p_pow, self.monomial, self.p_pow
+        )
+
+    def __mul__(self, other):
+        return milnor_basis_product(self, other)
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __str__(self):
+        if self.isZero():
+            return "0"
+        if milnor_basis_deg(self) == 0:
+            return str(self.c % self.p_pow)
+
+        str_operations = ""
+        if len(self.monomial[0]) > 0:
+            str_operations = f"Q{str(self.monomial[0])}".replace(",)", ")").replace(
+                ", ", ","
+            )
+
+        if len(self.monomial[1]) > 0:
+            str_operations = f"{str_operations}P{str(self.monomial[1])}".replace(
+                ",)", ")"
+            ).replace(", ", ",")
+
+        if self.c % self.p_pow == 1:
+            return f"{str_operations}"
+        return f"{self.c % self.p_pow}{str_operations}"
+
+    def __eq__(self, other):
+        if self.isZero() and other.isZero():
+            return True
+
+        return (self.coeffCmp(self.c, other.c)) and (self.monomial == other.monomial)
+
+    def asLinearCombination(self):
+        return LinearCombination([self])
+
+    def isZero(self):
+        return self.c % self.p_pow == 0
+
+    def copy(self):
+        return MonomialMilnorBasis(self.c, self.monomial, self.p_pow)
+
+    def sameGenerator(self, other):
+        return self.monomial == other.monomial
+
+    @staticmethod
+    def coeffCmp(c1, c2, p_pow=PARAM_FIXED_PRIME):
+        return (c1 - c2) % p_pow == 0
+
+
 #####################################################################
 #                           Maps                                    #
 #####################################################################
@@ -401,7 +488,7 @@ def steenrod_milnor_basis_decompose_positive_deg_partitions(
 
         R_2 = tuple([m.monomial[1][i] - R_1[i] for i in range(len(R_1))])
 
-        sgn = (-1) ** (len(np.trim_zeros(S_1, "b")) * len(np.trim_zeros(S_2, "b")))
+        sgn = 1  # (-1) ** (len(np.trim_zeros(S_1, "b")) * len(np.trim_zeros(S_2, "b"))) # WARNING: sign convention
         list_list_permutation_matrix = [[0] * len_S for i in range(len_S)]
 
         for i in range(len_S):
@@ -426,12 +513,12 @@ def steenrod_milnor_basis_decompose_positive_deg_partitions(
                     ][k]
                     list_list_permutation_matrix[j][k] = tmp_entry
 
-                sgn *= -1  # WARNING: sign convention
+                sgn *= -1
 
         r.append(
             TensorProductBasic(
-                Monomial(sgn * m.c, (S_1, tuple(R_1)), PARAM_FIXED_PRIME),
-                Monomial(1, (S_2, R_2), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(sgn * m.c, (S_1, tuple(R_1)), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(1, (S_2, R_2), PARAM_FIXED_PRIME),
             )
         )
 
@@ -455,15 +542,15 @@ def steenrod_milnor_basis_decompose_positive_deg(m, prefix=[], depth=-1):
 
 
 @cache
-def steenrod_milnor_basis_decompose(m):  # WARNING: REMOVE
+def steenrod_milnor_basis_decompose(m):
     r = []
 
     deg_m = milnor_basis_deg(m)
     if deg_m == 0:
         return [
             TensorProductBasic(
-                Monomial(m.c, (tuple(), tuple()), PARAM_FIXED_PRIME),
-                Monomial(1, (tuple(), tuple()), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(m.c, (tuple(), tuple()), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(1, (tuple(), tuple()), PARAM_FIXED_PRIME),
             )
         ]
     elif deg_m == -1:
@@ -889,8 +976,11 @@ def rearrange_img_diag0(lc_img):
 
 
 def deg(monomial):
-    """INPUT: monomial (Adem basis)"""
+    """INPUT: monomial (Milnor/Adem basis)"""
     """OUTPUT: tensor algebra degree"""
+    if monomial.basis == TAG_MILNOR_BASIS:
+        return milnor_basis_deg(monomial)
+
     if monomial.isZero():
         return -1
 
@@ -911,16 +1001,11 @@ def deg(monomial):
     return r
 
 
-def st_mult(m1, m2, basis=TAG_MILNOR_BASIS):
-    if basis == TAG_MILNOR_BASIS:
-        return milnor_basis_product(m1, m2)
-
-
-def kristensen_derivation(steenrod_operation):  # TODO: Milnor basis version (easy)
-    """INPUT: \\beta, P^i and constants"""
-    if deg(steenrod_operation) <= 0:
+def kristensen_derivation(steenrod_operation):
+    """INPUT: MonomialMilnorBasis object"""
+    if milnor_basis_deg(steenrod_operation) <= 0:
         return steenrod_operation
-
+    #################################### WARNING: UNIMPLEMENTED (Q(0) -> 1, P(R) -> 0, Q(S) -> 0; min(S) > 0)
     if steenrod_operation.monomial[0] == TAG_MONOMIAL_BOCKSTEIN:
         return Monomial(steenrod_operation.c, tuple([]), PARAM_FIXED_PRIME)
 
@@ -930,7 +1015,7 @@ def kristensen_derivation(steenrod_operation):  # TODO: Milnor basis version (ea
     return -1
 
 
-def monomial_to_mod_p(monomial):
+def monomial_to_mod_p(monomial):  # TODO: rewrite
     return Monomial(
         monomial.c % PARAM_FIXED_PRIME, monomial.monomial, PARAM_FIXED_PRIME
     )
@@ -978,7 +1063,7 @@ def A_aux(st_operation_mod_p_2, list_list_relations):
                         (-1) ** (deg(dec_monomial.m2) * rel_deg)
                         * A(dec_monomial.m1, rel_adem_part),
                         # TODO: convert to mod p (rel_non_adem_part)
-                        st_mult(dec_monomial.m2, rel_non_adem_part),
+                        milnor_basis_product(dec_monomial.m2, rel_non_adem_part),
                     )
                 )
 
@@ -994,7 +1079,7 @@ def A_aux(st_operation_mod_p_2, list_list_relations):
 
 
 def milnor_basis_deg(monomial):
-    """INPUT: Monomial(1, (tuple([]),tuple([])), PARAM_FIXED_PRIME)"""
+    """INPUT: MonomialMilnorBasis()"""
     if monomial.isZero():
         return -1
 
@@ -1095,7 +1180,7 @@ def milnor_basis(deg):
             q_truncations.add(tuple(q_curr))
 
             q_deg = milnor_basis_deg(
-                Monomial(1, (tuple(q_curr), tuple([])), PARAM_FIXED_PRIME)
+                MonomialMilnorBasis(1, (tuple(q_curr), tuple([])), PARAM_FIXED_PRIME)
             )  # TODO: avoid new object
 
             if q_deg == deg:
@@ -1256,7 +1341,7 @@ def milnor_basis_pow_product(m1, m2):
         m_coeff = factorial_prod_t_n // diagonal_factorial_prod
         if m_coeff % PARAM_FIXED_PRIME != 0:
             lc_solution.append(
-                Monomial(
+                MonomialMilnorBasis(
                     (external_factor * factorial_prod_t_n // diagonal_factorial_prod)
                     % PARAM_FIXED_PRIME,
                     (Q, tuple(T)),
@@ -1297,7 +1382,7 @@ def milnor_basis_product(m1, m2):
 
                         if bool_flag_continue:
                             lc_rearranged_new.append(
-                                Monomial(
+                                MonomialMilnorBasis(
                                     external_factor,
                                     (Q_part, tuple(P_part)),
                                     PARAM_FIXED_PRIME,
@@ -1315,7 +1400,7 @@ def milnor_basis_product(m1, m2):
             m_monomial_Q = list(m.monomial[0])
             m_monomial_Q += m2.monomial[0]
             lc_rearranged_new.append(
-                Monomial(
+                MonomialMilnorBasis(
                     m.c * m2.c, (tuple(m_monomial_Q), m.monomial[1]), PARAM_FIXED_PRIME
                 )
             )
@@ -1356,7 +1441,7 @@ def milnor_basis_product(m1, m2):
             lc_rearranged_new += milnor_basis_pow_product(
                 m,
                 # coeff previously considered
-                Monomial(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME),
             )
 
         lc_rearranged = lc_rearranged_new
@@ -1390,12 +1475,11 @@ print("Rearrangement ok.")
 
 ## Sketch ##
 
-m = Monomial(1, (tuple([1, 2]), tuple([1])), PARAM_FIXED_PRIME)
+m = MonomialMilnorBasis(1, (tuple([1, 2]), tuple([1])), PARAM_FIXED_PRIME)
 r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[1]))
-for k in r:
-    print(
-        f"{k.m1.c} Q{k.m1.monomial[0]} P{k.m1.monomial[1]} # Q{k.m2.monomial[0]} P{k.m2.monomial[1]}"
-    )
+print(r)
+r = reduced_diagonal0(Monomial.str2lc(1, "b1 p1 b1"))
+print(r)
 sys.exit()
 
 r = steenrod_milnor_basis_decompose(Monomial(1, ((0,), tuple()), PARAM_FIXED_PRIME))
