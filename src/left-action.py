@@ -107,6 +107,10 @@ class TensorProductBasic:
             m2.c = 1
 
             return LinearCombination([TensorProductBasic(m1, m2)])
+        elif self.isZero() and not other.isZero():
+            return LinearCombination([other])
+        elif not self.isZero() and other.isZero():
+            return LinearCombination([self])
         else:
             return LinearCombination([self, other])
 
@@ -170,6 +174,9 @@ class LinearCombination:
 
         if other.isZero():
             return self
+
+        if self.isZero():
+            return other
 
         list_monomials = []
 
@@ -465,6 +472,16 @@ class MonomialMilnorBasis:
 #####################################################################
 #                           Maps                                    #
 #####################################################################
+
+
+def milnor_basis_reduced_coproduct(m):
+    return (
+        milnor_basis_coproduct(m)
+        + (-1)
+        * TensorProductBasic(m, MonomialMilnorBasis(1, ((), ()))).asLinearCombination()
+        + (-1)
+        * TensorProductBasic(MonomialMilnorBasis(1, ((), ())), m).asLinearCombination()
+    )
 
 
 def milnor_basis_coproduct_positive_deg_partitions(m, R_1, prefix=[], depth=-1):
@@ -1100,17 +1117,56 @@ def A_aux(st_operation, list_list_relations):
 
                 list_img.append(
                     TensorProduct(
-                        (-1) ** (deg(dec_monomial.m2) * rel_deg)
-                        * A(dec_monomial.m1, rel_adem_part),
+                        (
+                            (-1) ** (deg(dec_monomial.m2) * rel_deg)
+                            * A(dec_monomial.m1, rel_adem_part)
+                        ).asLinearCombination(),
                         dec_monomial.m2.asLinearCombination() * sum(rel_non_adem_part),
-                    )
+                    ).expand()
                 )
 
-        print(f"@: {list_img}")  # OK
+            elif rel_type == 1:
+                rel_adem_part = [t.m2 for t in rel]
+                rel_non_adem_part = [
+                    monomial_to_milnor_basis(monomial_to_mod_p(t.m1)) for t in rel
+                ]
 
-        # TODO: otro caso
+                list_img.append(
+                    TensorProduct(
+                        (
+                            (-1)
+                            ** (
+                                deg(dec_monomial.m2) * deg(rel_non_adem_part[0])
+                                + deg(dec_monomial.m1)
+                                + deg(rel_non_adem_part[0])
+                            )
+                            * dec_monomial.m1.asLinearCombination()
+                            * sum(rel_non_adem_part)
+                        ),
+                        A(dec_monomial.m2, rel_adem_part),
+                    ).expand()
+                )
 
-    return
+    return sum(list_img)
+
+
+def A_equation_remaining_terms(st_operation, adem_relation):
+    list_img = []
+
+    for dec_monomial in milnor_basis_reduced_coproduct(st_operation):
+        list_img.append(
+            TensorProduct(
+                (-1) ** deg(dec_monomial.m1) * dec_monomial.m1.asLinearCombination(),
+                A(dec_monomial.m2, adem_relation),
+            ).expand()
+            + TensorProduct(
+                (-1) ** (deg(dec_monomial.m2) * deg(adem_relation[0]))
+                * A(dec_monomial.m1, adem_relation),
+                dec_monomial.m2.asLinearCombination(),
+            ).expand()
+        )
+
+    return sum(list_img)
 
 
 # Steenrod algebra routines
@@ -1488,8 +1544,6 @@ def milnor_basis_product(m1, m2):
     return sum([m.asLinearCombination() for m in lc_rearranged])  # TODO: expensive
 
 
-# TODO: remaining terms
-
 #####################################################################
 #                           Main                                    #
 #####################################################################
@@ -1524,6 +1578,11 @@ print(monomial_to_milnor_basis(Monomial.str2monomial(1, "b1 p1 b1")))
 # r = milnor_basis_coproduct(m)
 # print(r)
 print(A_aux(MonomialMilnorBasis(1, ((0,), ())), rearranged[0]))
+print(
+    A_equation_remaining_terms(
+        MonomialMilnorBasis(1, ((), (1,))), mod_p_adem_relation(1, 1, 0)
+    )
+)
 sys.exit()
 
 # print("="*120)
