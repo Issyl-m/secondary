@@ -116,7 +116,7 @@ class TensorProductBasic:
         return r
 
     def __mul__(self, other):
-        return TensorProductBasic(  # WARNING: degree notion
+        return TensorProductBasic(
             (-1) ** (deg(self.m2) * deg(other.m1)) * self.m1 * other.m1,
             self.m2 * other.m2,
         )
@@ -256,6 +256,9 @@ class LinearCombination:
 
         return str_output
 
+    def asLinearCombination(self):
+        return self
+
     def __repr__(self):
         return self.__str__()
 
@@ -380,7 +383,7 @@ class MonomialMilnorBasis:
     def __init__(self, coeff, tuple_pow_operations, prime_power=PARAM_FIXED_PRIME):
         self.c = coeff
         self.monomial = (
-            np.trim_zeros(tuple_pow_operations[0], "b"),
+            tuple_pow_operations[0],
             np.trim_zeros(tuple_pow_operations[1], "b"),
         )
         self.p_pow = prime_power
@@ -440,7 +443,13 @@ class MonomialMilnorBasis:
         return LinearCombination([self])
 
     def isZero(self):
-        return self.c % self.p_pow == 0
+        if self.c % self.p_pow == 0:
+            return True
+        else:
+            if len(tuple(set(self.monomial[0]))) < len(self.monomial[0]):
+                return True
+
+        return False
 
     def copy(self):
         return MonomialMilnorBasis(self.c, self.monomial, self.p_pow)
@@ -481,8 +490,8 @@ def steenrod_milnor_basis_decompose_positive_deg_partitions(
 
             S = S.tolist()
         else:
-            S_1 = tuple()
-            S_2 = tuple()
+            S_1 = ()
+            S_2 = ()
 
         len_S_1 = len(S_1)
 
@@ -549,8 +558,8 @@ def steenrod_milnor_basis_decompose(m):
     if deg_m == 0:
         return [
             TensorProductBasic(
-                MonomialMilnorBasis(m.c, (tuple(), tuple()), PARAM_FIXED_PRIME),
-                MonomialMilnorBasis(1, (tuple(), tuple()), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(m.c, ((), ()), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(1, ((), ()), PARAM_FIXED_PRIME),
             )
         ]
     elif deg_m == -1:
@@ -978,6 +987,7 @@ def rearrange_img_diag0(lc_img):
 def deg(monomial):
     """INPUT: monomial (Milnor/Adem basis)"""
     """OUTPUT: tensor algebra degree"""
+
     if monomial.basis == TAG_MILNOR_BASIS:
         return milnor_basis_deg(monomial)
 
@@ -1003,22 +1013,49 @@ def deg(monomial):
 
 def kristensen_derivation(steenrod_operation):
     """INPUT: MonomialMilnorBasis object"""
+
     if milnor_basis_deg(steenrod_operation) <= 0:
         return steenrod_operation
-    #################################### WARNING: UNIMPLEMENTED (Q(0) -> 1, P(R) -> 0, Q(S) -> 0; min(S) > 0)
-    if steenrod_operation.monomial[0] == TAG_MONOMIAL_BOCKSTEIN:
-        return Monomial(steenrod_operation.c, tuple([]), PARAM_FIXED_PRIME)
 
-    if steenrod_operation.monomial[0] == TAG_MONOMIAL_POWER:
-        return Monomial(0, tuple([]))
+    if len(steenrod_operation.monomial[0]) > 0:
+        sgn = 0
+        if min(steenrod_operation.monomial[0]) == 0:
+            sgn = 1
+        return sgn * MonomialMilnorBasis(
+            steenrod_operation.c, ((), steenrod_operation.monomial[1])
+        )
+
+    if len(steenrod_operation.monomial[1]) > 0:
+        return MonomialMilnorBasis(0, ((), ()))
 
     return -1
 
 
-def monomial_to_mod_p(monomial):  # TODO: rewrite
+def monomial_to_mod_p(monomial):
     return Monomial(
         monomial.c % PARAM_FIXED_PRIME, monomial.monomial, PARAM_FIXED_PRIME
     )
+
+
+def monomial_to_milnor_basis(monomial):
+    """OUTPUT: LinearCombination object"""
+
+    lc_monomials = MonomialMilnorBasis(1, ((), ())).asLinearCombination()
+
+    for i in range(len(monomial.monomial) >> 1):
+        st_op = monomial.monomial[2 * i]
+        st_pow = monomial.monomial[2 * i + 1]
+
+        if st_op == TAG_MONOMIAL_BOCKSTEIN:
+            list_operations = ((0,), ())
+        else:
+            list_operations = ((), (st_pow,))
+
+        lc_monomials *= MonomialMilnorBasis(
+            monomial.c, list_operations
+        ).asLinearCombination()
+
+    return lc_monomials
 
 
 def A(steenrod_operation, list_adem_relation):  # TODO: monomial_to_mod_p
@@ -1063,7 +1100,9 @@ def A_aux(st_operation_mod_p_2, list_list_relations):
                         (-1) ** (deg(dec_monomial.m2) * rel_deg)
                         * A(dec_monomial.m1, rel_adem_part),
                         # TODO: convert to mod p (rel_non_adem_part)
-                        milnor_basis_product(dec_monomial.m2, rel_non_adem_part),
+                        milnor_basis_product(
+                            dec_monomial.m2, rel_non_adem_part
+                        ),  # TODO: a * b
                     )
                 )
 
@@ -1441,13 +1480,13 @@ def milnor_basis_product(m1, m2):
             lc_rearranged_new += milnor_basis_pow_product(
                 m,
                 # coeff previously considered
-                MonomialMilnorBasis(1, (tuple(), m2.monomial[1]), PARAM_FIXED_PRIME),
+                MonomialMilnorBasis(1, ((), m2.monomial[1]), PARAM_FIXED_PRIME),
             )
 
         lc_rearranged = lc_rearranged_new
         lc_rearranged_new = []
 
-    return lc_rearranged
+    return sum([m.asLinearCombination() for m in lc_rearranged])
 
 
 # TODO: remaining terms
@@ -1480,11 +1519,13 @@ r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[1]))
 print(r)
 r = reduced_diagonal0(Monomial.str2lc(1, "b1 p1 b1"))
 print(r)
+
+print(monomial_to_milnor_basis(Monomial.str2monomial(1, "b1 p1 b1")))
 sys.exit()
 
-r = steenrod_milnor_basis_decompose(Monomial(1, ((0,), tuple()), PARAM_FIXED_PRIME))
+r = steenrod_milnor_basis_decompose(Monomial(1, ((0,), ()), PARAM_FIXED_PRIME))
 print(r)
-# print(A_aux(Monomial(1, ((0,), tuple()), PARAM_FIXED_PRIME), rearranged[0]))
+# print(A_aux(Monomial(1, ((0,), ()), PARAM_FIXED_PRIME), rearranged[0]))
 
 # print("="*120)
 # print("Steenrod algebra tests")
@@ -1493,10 +1534,10 @@ print(r)
 # b = milnor_basis(80)
 # print(b)
 
-# p = milnor_basis_pow_product(Monomial(1, (tuple(), (100,5))), Monomial(1, (tuple(), (4,5,6))))
-# p = milnor_basis_pow_product(Monomial(1, (tuple(), (29,3,3,3,3)), PARAM_FIXED_PRIME), Monomial(1, (tuple(), (10,3,2)), PARAM_FIXED_PRIME))
-# p = milnor_basis_pow_product(Monomial(1, (tuple(), (300,3,3,3,3))), Monomial(1, (tuple(), (1000,3,2))))
-# p = milnor_basis_pow_product(Monomial(1, (tuple(), (3000,3,3,3,3))), Monomial(2, (tuple(), (1000,3,2))))
+# p = milnor_basis_pow_product(Monomial(1, ((), (100,5))), Monomial(1, ((), (4,5,6))))
+# p = milnor_basis_pow_product(Monomial(1, ((), (29,3,3,3,3)), PARAM_FIXED_PRIME), Monomial(1, ((), (10,3,2)), PARAM_FIXED_PRIME))
+# p = milnor_basis_pow_product(Monomial(1, ((), (300,3,3,3,3))), Monomial(1, ((), (1000,3,2))))
+# p = milnor_basis_pow_product(Monomial(1, ((), (3000,3,3,3,3))), Monomial(2, ((), (1000,3,2))))
 # print(len(p))
 
 # p = milnor_basis_product(Monomial(1, ((1, 9), (33, 1)), PARAM_FIXED_PRIME),
