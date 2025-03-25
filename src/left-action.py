@@ -467,14 +467,12 @@ class MonomialMilnorBasis:
 #####################################################################
 
 
-def steenrod_milnor_basis_decompose_positive_deg_partitions(
-    m, R_1, prefix=[], depth=-1
-):
+def milnor_basis_coproduct_positive_deg_partitions(m, R_1, prefix=[], depth=-1):
     r = []
 
     if depth >= 0:
         for i in range(2):
-            r += steenrod_milnor_basis_decompose_positive_deg_partitions(
+            r += milnor_basis_coproduct_positive_deg_partitions(
                 m, R_1, prefix=[i == 1] + prefix, depth=depth - 1
             )
     else:
@@ -534,16 +532,16 @@ def steenrod_milnor_basis_decompose_positive_deg_partitions(
     return r
 
 
-def steenrod_milnor_basis_decompose_positive_deg(m, prefix=[], depth=-1):
+def milnor_basis_coproduct_positive_deg(m, prefix=[], depth=-1):
     r = []
 
     if depth > 0:
         for i in range(m.monomial[1][depth - 1] + 1):
-            r += steenrod_milnor_basis_decompose_positive_deg(
+            r += milnor_basis_coproduct_positive_deg(
                 m, prefix=[i] + prefix, depth=depth - 1
             )
     else:
-        r += steenrod_milnor_basis_decompose_positive_deg_partitions(
+        r += milnor_basis_coproduct_positive_deg_partitions(
             m, prefix, depth=len(m.monomial[0]) - 1
         )
 
@@ -551,7 +549,7 @@ def steenrod_milnor_basis_decompose_positive_deg(m, prefix=[], depth=-1):
 
 
 @cache
-def steenrod_milnor_basis_decompose(m):
+def milnor_basis_coproduct(m):
     r = []
 
     deg_m = milnor_basis_deg(m)
@@ -565,9 +563,9 @@ def steenrod_milnor_basis_decompose(m):
     elif deg_m == -1:
         return []
     else:
-        r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[0]))
+        r = milnor_basis_coproduct_positive_deg(m, depth=len(m.monomial[1]))
 
-    return r
+    return LinearCombination(r)
 
 
 @cache
@@ -1058,9 +1056,9 @@ def monomial_to_milnor_basis(monomial):
     return lc_monomials
 
 
-def A(steenrod_operation, list_adem_relation):  # TODO: monomial_to_mod_p
+def A(steenrod_operation, list_adem_relation):
     if deg(steenrod_operation) <= 0:
-        return Monomial(0, tuple([]), PARAM_FIXED_PRIME)
+        return MonomialMilnorBasis(0, ((), ()))
 
     bool_mod_p_term_found = False
     for monomial in list_adem_relation:
@@ -1068,21 +1066,24 @@ def A(steenrod_operation, list_adem_relation):  # TODO: monomial_to_mod_p
             bool_mod_p_term_found = True
 
     if bool_mod_p_term_found:
-        rel = list_adem_relation[0]
-        multiple_of_p = Monomial(
-            int(rel.c / PARAM_FIXED_PRIME), rel.monomial, PARAM_FIXED_PRIME
+        rel = list_adem_relation[0]  # TODO: OK but suspicious
+        multiple_of_p = monomial_to_milnor_basis(
+            monomial_to_mod_p(
+                Monomial(rel.c // PARAM_FIXED_PRIME, rel.monomial, PARAM_FIXED_PRIME)
+            )
         )
         # mod p > 2
-        return -1 * kristensen_derivation(steenrod_operation) * multiple_of_p
+        return (
+            -1
+            * kristensen_derivation(steenrod_operation).asLinearCombination()
+            * multiple_of_p
+        )
 
     return -1  # TODO: unimplemented, recursion
 
 
-def A_aux(st_operation_mod_p_2, list_list_relations):
-    st_operation = monomial_to_mod_p(st_operation_mod_p_2)
-    st_dec = steenrod_decompose(  # TODO: change to Milnor basis implementation
-        st_operation.monomial[0], st_operation.monomial[1], PARAM_FIXED_PRIME
-    )
+def A_aux(st_operation, list_list_relations):
+    st_dec = milnor_basis_coproduct(st_operation)
 
     for list_relation in list_list_relations:
         rel = list_relation[0]
@@ -1093,21 +1094,19 @@ def A_aux(st_operation_mod_p_2, list_list_relations):
         for dec_monomial in st_dec.monomials:
             if rel_type == 2 or rel_type == 0:
                 rel_adem_part = [t.m1 for t in rel]
-                rel_non_adem_part = [t.m2 for t in rel]
+                rel_non_adem_part = [
+                    monomial_to_milnor_basis(monomial_to_mod_p(t.m2)) for t in rel
+                ]
 
                 list_img.append(
-                    TensorProductBasic(
+                    TensorProduct(
                         (-1) ** (deg(dec_monomial.m2) * rel_deg)
                         * A(dec_monomial.m1, rel_adem_part),
-                        # TODO: convert to mod p (rel_non_adem_part)
-                        milnor_basis_product(
-                            dec_monomial.m2, rel_non_adem_part
-                        ),  # TODO: a * b
+                        dec_monomial.m2.asLinearCombination() * sum(rel_non_adem_part),
                     )
                 )
 
-        # TODO: esto es ok, pero falta multiplicar en álgebra de Steenrod
-        print(f"@: {list_img}")
+        print(f"@: {list_img}")  # OK
 
         # TODO: otro caso
 
@@ -1486,7 +1485,7 @@ def milnor_basis_product(m1, m2):
         lc_rearranged = lc_rearranged_new
         lc_rearranged_new = []
 
-    return sum([m.asLinearCombination() for m in lc_rearranged])
+    return sum([m.asLinearCombination() for m in lc_rearranged])  # TODO: expensive
 
 
 # TODO: remaining terms
@@ -1515,17 +1514,17 @@ print("Rearrangement ok.")
 ## Sketch ##
 
 m = MonomialMilnorBasis(1, (tuple([1, 2]), tuple([1])), PARAM_FIXED_PRIME)
-r = steenrod_milnor_basis_decompose_positive_deg(m, depth=len(m.monomial[1]))
+r = milnor_basis_coproduct_positive_deg(m, depth=len(m.monomial[1]))
 print(r)
 r = reduced_diagonal0(Monomial.str2lc(1, "b1 p1 b1"))
 print(r)
 
 print(monomial_to_milnor_basis(Monomial.str2monomial(1, "b1 p1 b1")))
-sys.exit()
 
-r = steenrod_milnor_basis_decompose(Monomial(1, ((0,), ()), PARAM_FIXED_PRIME))
-print(r)
-# print(A_aux(Monomial(1, ((0,), ()), PARAM_FIXED_PRIME), rearranged[0]))
+# r = milnor_basis_coproduct(m)
+# print(r)
+print(A_aux(MonomialMilnorBasis(1, ((0,), ())), rearranged[0]))
+sys.exit()
 
 # print("="*120)
 # print("Steenrod algebra tests")
