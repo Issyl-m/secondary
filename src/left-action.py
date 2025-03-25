@@ -470,8 +470,148 @@ class MonomialMilnorBasis:
 
 
 #####################################################################
+#                Misc routines (testing purposes)                   #
+#####################################################################
+
+
+def mod_p_inv(n, prime):  # TODO: decent approach
+    for i in range(prime):
+        if n * i % prime == 1:
+            return i
+
+
+#####################################################################
+#           Linear algebra routines (testing purposes)              #
+#####################################################################
+
+
+def mod_p_rref(list_list_m):
+    n_rows = len(list_list_m)
+
+    if n_rows == 0:
+        return []
+
+    if len(list_list_m[0]) == 0:
+        return []
+
+    n_cols = len(list_list_m[0])
+    list_list_m_output = list_list_m.copy()
+
+    row_top = 0
+    for i in range(n_cols - 1):
+        row_pivot = -1
+
+        for j in range(n_rows):
+            if list_list_m[j][i] % PARAM_FIXED_PRIME != 0:
+                row_pivot = j
+                break
+
+        if row_pivot >= 0:
+            for k in range(n_cols):
+                original_entry_val = list_list_m[row_pivot][k]
+                list_list_m[row_pivot][k] = list_list_m[row_top][k]
+                list_list_m[row_top][k] = original_entry_val
+
+            pivot_val = list_list_m[row_top][i]
+            row_top += 1
+
+            for r in range(n_cols - i):
+                bool_leading_coeff_found = False
+                for s in range(n_rows - row_top):
+                    if not bool_leading_coeff_found:
+                        row_leading_coeff = list_list_m[s][i]
+                        bool_leading_coeff_found = True
+
+                    list_list_m[s][r] -= (
+                        row_leading_coeff
+                        * mod_p_inv(pivot_val, PARAM_FIXED_PRIME)
+                        * list_list_m[row_pivot][r]
+                    )
+
+    # TODO: backwards substitution
+
+    return list_list_m_output
+
+
+def find_reduced_coproduct_preimg(list_list_m, list_v):
+    rref = mod_p_rref([list_list_m[i] + [list_v[i]] for i in range(len(list_list_m))])
+
+    print("@@@@@@@@@:")
+    print(rref)
+
+    # TODO: particular solution
+    # TODO: 2element
+
+    return
+
+
+#####################################################################
 #                           Maps                                    #
 #####################################################################
+
+
+def milnor_basis_tensor_prod_lc_to_vector(lc_input):
+    if len(lc_input.monomials) == 0:
+        return []
+
+    deg = milnor_basis_tensor_prod_deg(lc_input.monomials[0])
+
+    milnor_basis_tensor_prod_at_deg = [
+        (m1, m2)
+        for basis_tuple in milnor_basis_tensor_product(deg)
+        for m2 in basis_tuple[1]
+        for m1 in basis_tuple[0]
+    ]
+
+    len_milnor_basis_tensor_prod_at_deg = len(milnor_basis_tensor_prod_at_deg)
+
+    r = [0] * len_milnor_basis_tensor_prod_at_deg
+
+    for j in range(len_milnor_basis_tensor_prod_at_deg):
+        for monomial in lc_input:
+            if (
+                monomial.m1.monomial == milnor_basis_tensor_prod_at_deg[j][0]
+                and monomial.m2.monomial == milnor_basis_tensor_prod_at_deg[j][1]
+            ):
+                r[j] = monomial.m1.c * monomial.m2.c
+
+    return r
+
+
+@cache
+def milnor_basis_reduced_coproduct_as_matrix(deg):
+    """Milnor basis coproduct matrix at a given degree"""
+
+    milnor_basis_at_deg = milnor_basis(deg)
+    milnor_basis_tensor_prod_at_deg = [
+        (m1, m2)
+        for basis_tuple in milnor_basis_tensor_product(deg)
+        for m2 in basis_tuple[1]
+        for m1 in basis_tuple[0]
+    ]
+
+    len_milnor_basis_at_deg = len(milnor_basis_at_deg)
+    len_milnor_basis_tensor_prod_at_deg = len(milnor_basis_tensor_prod_at_deg)
+
+    list_list_matr = [
+        [0] * len_milnor_basis_at_deg
+        for i in range(len_milnor_basis_tensor_prod_at_deg)
+    ]
+
+    for i in range(len_milnor_basis_at_deg):
+        lc_basis_img = milnor_basis_reduced_coproduct(
+            MonomialMilnorBasis(1, milnor_basis_at_deg[i])
+        )
+
+        for j in range(len_milnor_basis_tensor_prod_at_deg):
+            for monomial in lc_basis_img.monomials:
+                if (
+                    monomial.m1.monomial == milnor_basis_tensor_prod_at_deg[j][0]
+                    and monomial.m2.monomial == milnor_basis_tensor_prod_at_deg[j][1]
+                ):
+                    list_list_matr[j][i] = monomial.m1.c * monomial.m2.c
+
+    return list_list_matr
 
 
 def milnor_basis_reduced_coproduct(m):
@@ -1172,6 +1312,13 @@ def A_equation_remaining_terms(st_operation, adem_relation):
 # Steenrod algebra routines
 
 
+def milnor_basis_tensor_prod_deg(monomial):
+    if monomial.isZero():
+        return -1
+
+    return milnor_basis_deg(monomial.m1) + milnor_basis_deg(monomial.m2)
+
+
 def milnor_basis_deg(monomial):
     """INPUT: MonomialMilnorBasis()"""
     if monomial.isZero():
@@ -1296,6 +1443,22 @@ def milnor_basis(deg):
 
         else:
             q_curr = []
+
+    return r
+
+
+@cache
+def milnor_basis_tensor_product(deg):
+    r = []
+
+    for i in range(deg + 1):
+        j = deg - i
+
+        milnor_basis_1 = milnor_basis(i)
+        milnor_basis_2 = milnor_basis(j)
+
+        if len(milnor_basis_1) > 0 and len(milnor_basis_2) > 0:
+            r.append((milnor_basis_1, milnor_basis_2))
 
     return r
 
@@ -1577,10 +1740,20 @@ print(monomial_to_milnor_basis(Monomial.str2monomial(1, "b1 p1 b1")))
 
 # r = milnor_basis_coproduct(m)
 # print(r)
-print(A_aux(MonomialMilnorBasis(1, ((0,), ())), rearranged[0]))
+www = A_aux(MonomialMilnorBasis(1, ((0,), ())), rearranged[0])
+print(www)
 print(
     A_equation_remaining_terms(
         MonomialMilnorBasis(1, ((), (1,))), mod_p_adem_relation(1, 1, 0)
+    )
+)
+# print(milnor_basis_tensor_product(8))
+print(milnor_basis_reduced_coproduct_as_matrix(8))
+print(milnor_basis_tensor_prod_lc_to_vector(www))
+print(
+    find_reduced_coproduct_preimg(
+        milnor_basis_reduced_coproduct_as_matrix(8),
+        milnor_basis_tensor_prod_lc_to_vector(www),
     )
 )
 sys.exit()
