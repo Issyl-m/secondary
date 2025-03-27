@@ -474,6 +474,7 @@ class MonomialMilnorBasis:
 #####################################################################
 
 
+@cache
 def mod_p_inv(n, prime):  # TODO: decent approach
     for i in range(prime):
         if n * i % prime == 1:
@@ -494,8 +495,9 @@ def mod_p_rref(list_list_m):
     if len(list_list_m[0]) == 0:
         return []
 
+    list_pivots = []
+
     n_cols = len(list_list_m[0])
-    list_list_m_output = list_list_m.copy()
 
     row_top = 0
     for i in range(n_cols - 1):
@@ -513,7 +515,10 @@ def mod_p_rref(list_list_m):
                 list_list_m[row_top][k] = original_entry_val
 
             pivot_val = list_list_m[row_top][i]
+            pivot_inv = mod_p_inv(pivot_val, PARAM_FIXED_PRIME)
             row_top += 1
+
+            list_pivots.append((row_top - 1, i, pivot_inv))
 
             for r in range(n_cols - i):
                 bool_leading_coeff_found = False
@@ -523,26 +528,44 @@ def mod_p_rref(list_list_m):
                         bool_leading_coeff_found = True
 
                     list_list_m[s][r] -= (
-                        row_leading_coeff
-                        * mod_p_inv(pivot_val, PARAM_FIXED_PRIME)
-                        * list_list_m[row_pivot][r]
-                    )
+                        row_leading_coeff * pivot_inv * list_list_m[row_pivot][r]
+                    ) % PARAM_FIXED_PRIME
 
-    # TODO: backwards substitution
+    for pivot_row, pivot_col, pivot_inv in list_pivots:
 
-    return list_list_m_output
+        for j in range(pivot_row):
+            row_leading_coeff = list_list_m[j][pivot_col]
+
+            for i in range(n_cols - pivot_col):
+                list_list_m[j][pivot_col + i] -= (
+                    row_leading_coeff
+                    * pivot_inv
+                    * list_list_m[pivot_row][pivot_col + i]
+                ) % PARAM_FIXED_PRIME
+
+    return (list_list_m, list_pivots)
 
 
-def find_reduced_coproduct_preimg(list_list_m, list_v):
-    rref = mod_p_rref([list_list_m[i] + [list_v[i]] for i in range(len(list_list_m))])
+def find_reduced_coproduct_preimg(list_list_m, list_v, degree):
+    list_monomials = []
 
-    print("@@@@@@@@@:")
-    print(rref)
+    rref, list_pivots = mod_p_rref(
+        [list_list_m[i] + [list_v[i]] for i in range(len(list_list_m))]
+    )
 
-    # TODO: particular solution
-    # TODO: 2element
+    list_vect_sol = [0] * (len(rref[0]) - 1)
 
-    return
+    for pivot_row, pivot_col, pivot_inv in list_pivots:
+        list_vect_sol[pivot_col] = rref[pivot_row][-1]
+
+    for i in range(len(list_vect_sol)):
+        c = list_vect_sol[i]
+        if c % PARAM_FIXED_PRIME != 0:
+            list_monomials.append(
+                MonomialMilnorBasis(c, milnor_basis(degree)[i]).asLinearCombination()
+            )
+
+    return sum(list_monomials)
 
 
 #####################################################################
@@ -1740,6 +1763,7 @@ print(monomial_to_milnor_basis(Monomial.str2monomial(1, "b1 p1 b1")))
 
 # r = milnor_basis_coproduct(m)
 # print(r)
+print("### A_aux test ###")
 www = A_aux(MonomialMilnorBasis(1, ((0,), ())), rearranged[0])
 print(www)
 print(
@@ -1754,6 +1778,7 @@ print(
     find_reduced_coproduct_preimg(
         milnor_basis_reduced_coproduct_as_matrix(8),
         milnor_basis_tensor_prod_lc_to_vector(www),
+        8,
     )
 )
 sys.exit()
