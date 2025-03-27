@@ -470,7 +470,34 @@ class MonomialMilnorBasis:
 
 
 #####################################################################
-#                Misc routines (just for testing purposes)          #
+#                           Utils                                   #
+#####################################################################
+
+
+@cache
+def factorial(n):
+    r = 1
+    if n > 1:
+        for i in range(2, n + 1):
+            r = r * i
+    else:
+        r = 1
+    return r
+
+
+@cache
+def bin_coeff(p, n, k):
+    if (n, k) == (0, 0):
+        return 1
+    if k > n:
+        return 0
+    if k < 0:
+        return 0
+    return (factorial(n) // (factorial(k) * factorial(n - k))) % p
+
+
+#####################################################################
+#                 Math utils (just for testing purposes)            #
 #####################################################################
 
 
@@ -559,6 +586,11 @@ def mod_p_rref(list_list_m):
     return (list_list_m, list_pivots)
 
 
+#####################################################################
+#                           Maps                                    #
+#####################################################################
+
+
 def find_reduced_coproduct_preimg(list_list_m, list_v, degree):
     list_monomials = []
 
@@ -579,39 +611,6 @@ def find_reduced_coproduct_preimg(list_list_m, list_v, degree):
             )
 
     return sum(list_monomials)
-
-
-#####################################################################
-#                           Maps                                    #
-#####################################################################
-
-
-def milnor_basis_tensor_prod_lc_to_vector(lc_input):
-    if len(lc_input.monomials) == 0:
-        return []
-
-    deg = milnor_basis_tensor_prod_deg(lc_input.monomials[0])
-
-    milnor_basis_tensor_prod_at_deg = [
-        (m1, m2)
-        for basis_tuple in milnor_basis_tensor_product(deg)
-        for m2 in basis_tuple[1]
-        for m1 in basis_tuple[0]
-    ]
-
-    len_milnor_basis_tensor_prod_at_deg = len(milnor_basis_tensor_prod_at_deg)
-
-    r = [0] * len_milnor_basis_tensor_prod_at_deg
-
-    for j in range(len_milnor_basis_tensor_prod_at_deg):
-        for monomial in lc_input:
-            if (
-                monomial.m1.monomial == milnor_basis_tensor_prod_at_deg[j][0]
-                and monomial.m2.monomial == milnor_basis_tensor_prod_at_deg[j][1]
-            ):
-                r[j] = monomial.m1.c * monomial.m2.c
-
-    return r
 
 
 @cache
@@ -819,28 +818,6 @@ def reduced_diagonal0(linear_comb):
     )
 
     return sum(r)
-
-
-@cache
-def factorial(n):
-    r = 1
-    if n > 1:
-        for i in range(2, n + 1):
-            r = r * i
-    else:
-        r = 1
-    return r
-
-
-@cache
-def bin_coeff(p, n, k):
-    if (n, k) == (0, 0):
-        return 1
-    if k > n:
-        return 0
-    if k < 0:
-        return 0
-    return (factorial(n) // (factorial(k) * factorial(n - k))) % p
 
 
 # TODO: p = 2
@@ -1175,33 +1152,6 @@ def rearrange_img_diag0(lc_img):
     return (r, pending_sum)
 
 
-def deg(monomial):
-    """INPUT: monomial (Milnor/Adem basis)"""
-    """OUTPUT: tensor algebra degree"""
-
-    if monomial.basis == TAG_MILNOR_BASIS:
-        return milnor_basis_deg(monomial)
-
-    if monomial.isZero():
-        return -1
-
-    if len(monomial.monomial) == 0:
-        return 0
-
-    r = 0
-
-    for i in range(0, len(monomial.monomial) >> 1):
-        op = monomial.monomial[2 * i]
-        exp = monomial.monomial[2 * i + 1]
-
-        if op == TAG_MONOMIAL_BOCKSTEIN:
-            r += 1
-        else:
-            r += 2 * exp * (PARAM_FIXED_PRIME - 1)
-
-    return r
-
-
 def kristensen_derivation(steenrod_operation):
     """INPUT: MonomialMilnorBasis object"""
 
@@ -1220,33 +1170,6 @@ def kristensen_derivation(steenrod_operation):
         return MonomialMilnorBasis(0, ((), ()))
 
     return -1
-
-
-def monomial_to_mod_p(monomial):
-    return Monomial(
-        monomial.c % PARAM_FIXED_PRIME, monomial.monomial, PARAM_FIXED_PRIME
-    )
-
-
-def monomial_to_milnor_basis(monomial):
-    """OUTPUT: LinearCombination object"""
-
-    lc_monomials = MonomialMilnorBasis(1, ((), ())).asLinearCombination()
-
-    for i in range(len(monomial.monomial) >> 1):
-        st_op = monomial.monomial[2 * i]
-        st_pow = monomial.monomial[2 * i + 1]
-
-        if st_op == TAG_MONOMIAL_BOCKSTEIN:
-            list_operations = ((0,), ())
-        else:
-            list_operations = ((), (st_pow,))
-
-        lc_monomials *= MonomialMilnorBasis(
-            monomial.c, list_operations
-        ).asLinearCombination()
-
-    return lc_monomials
 
 
 def A(steenrod_operation, list_adem_relation):
@@ -1346,6 +1269,88 @@ def A_equation_remaining_terms(st_operation, adem_relation):
 
 
 # Steenrod algebra routines
+
+
+def milnor_basis_tensor_prod_lc_to_vector(lc_input):
+    if len(lc_input.monomials) == 0:
+        return []
+
+    deg = milnor_basis_tensor_prod_deg(lc_input.monomials[0])
+
+    milnor_basis_tensor_prod_at_deg = [
+        (m1, m2)
+        for basis_tuple in milnor_basis_tensor_product(deg)
+        for m2 in basis_tuple[1]
+        for m1 in basis_tuple[0]
+    ]
+
+    len_milnor_basis_tensor_prod_at_deg = len(milnor_basis_tensor_prod_at_deg)
+
+    r = [0] * len_milnor_basis_tensor_prod_at_deg
+
+    for j in range(len_milnor_basis_tensor_prod_at_deg):
+        for monomial in lc_input:
+            if (
+                monomial.m1.monomial == milnor_basis_tensor_prod_at_deg[j][0]
+                and monomial.m2.monomial == milnor_basis_tensor_prod_at_deg[j][1]
+            ):
+                r[j] = monomial.m1.c * monomial.m2.c
+
+    return r
+
+
+def deg(monomial):
+    """INPUT: monomial (Milnor/Adem basis)"""
+    """OUTPUT: tensor algebra degree"""
+
+    if monomial.basis == TAG_MILNOR_BASIS:
+        return milnor_basis_deg(monomial)
+
+    if monomial.isZero():
+        return -1
+
+    if len(monomial.monomial) == 0:
+        return 0
+
+    r = 0
+
+    for i in range(0, len(monomial.monomial) >> 1):
+        op = monomial.monomial[2 * i]
+        exp = monomial.monomial[2 * i + 1]
+
+        if op == TAG_MONOMIAL_BOCKSTEIN:
+            r += 1
+        else:
+            r += 2 * exp * (PARAM_FIXED_PRIME - 1)
+
+    return r
+
+
+def monomial_to_mod_p(monomial):
+    return Monomial(
+        monomial.c % PARAM_FIXED_PRIME, monomial.monomial, PARAM_FIXED_PRIME
+    )
+
+
+def monomial_to_milnor_basis(monomial):
+    """OUTPUT: LinearCombination object"""
+
+    lc_monomials = MonomialMilnorBasis(1, ((), ())).asLinearCombination()
+
+    for i in range(len(monomial.monomial) >> 1):
+        st_op = monomial.monomial[2 * i]
+        st_pow = monomial.monomial[2 * i + 1]
+
+        if st_op == TAG_MONOMIAL_BOCKSTEIN:
+            list_operations = ((0,), ())
+        else:
+            list_operations = ((), (st_pow,))
+
+        lc_monomials *= MonomialMilnorBasis(
+            monomial.c, list_operations
+        ).asLinearCombination()
+
+    return lc_monomials
 
 
 def milnor_basis_tensor_prod_deg(monomial):
