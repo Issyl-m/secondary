@@ -470,7 +470,7 @@ class MonomialMilnorBasis:
 
 
 #####################################################################
-#                Misc routines (testing purposes)                   #
+#                Misc routines (just for testing purposes)          #
 #####################################################################
 
 
@@ -482,7 +482,7 @@ def mod_p_inv(n, prime):  # TODO: decent approach
 
 
 #####################################################################
-#           Linear algebra routines (testing purposes)              #
+#           Linear algebra routines (just for testing purposes)     #
 #####################################################################
 
 
