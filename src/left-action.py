@@ -505,6 +505,15 @@ def mod_p_rref(list_list_m):
 
         for j in range(n_rows):
             if list_list_m[j][i] % PARAM_FIXED_PRIME != 0:
+                bool_is_pivot = True
+                for r in range(i):
+                    if list_list_m[j][r] % PARAM_FIXED_PRIME != 0:
+                        bool_is_pivot = False
+                        break
+
+                if not bool_is_pivot:
+                    continue
+
                 row_pivot = j
                 break
 
@@ -516,19 +525,23 @@ def mod_p_rref(list_list_m):
 
             pivot_val = list_list_m[row_top][i]
             pivot_inv = mod_p_inv(pivot_val, PARAM_FIXED_PRIME)
+            pivot_new_row = row_top
             row_top += 1
 
-            list_pivots.append((row_top - 1, i, pivot_inv))
+            list_pivots.append((pivot_new_row, i, pivot_inv))
 
-            for r in range(n_cols - i):
+            for s in range(n_rows - pivot_new_row - 1):
                 bool_leading_coeff_found = False
-                for s in range(n_rows - row_top):
+
+                for r in range(n_cols - i):
                     if not bool_leading_coeff_found:
-                        row_leading_coeff = list_list_m[s][i]
+                        row_leading_coeff = list_list_m[pivot_new_row + 1 + s][i]
                         bool_leading_coeff_found = True
 
-                    list_list_m[s][r] -= (
-                        row_leading_coeff * pivot_inv * list_list_m[row_pivot][r]
+                    list_list_m[pivot_new_row + 1 + s][i + r] -= (
+                        row_leading_coeff
+                        * pivot_inv
+                        * list_list_m[pivot_new_row][i + r]
                     ) % PARAM_FIXED_PRIME
 
     for pivot_row, pivot_col, pivot_inv in list_pivots:
