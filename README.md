@@ -2,9 +2,9 @@
 
 Resolutions over the secondary Steenrod algebra. Relevant routines (p > 2).
 
-# Some values of the left action A(r, x) for p = 3
+# Some values of the left action A(a, r) for p = 3
 
-This repository is not being updated temporarily. Some values of `A(r, x)` computed using a further version of my program include
+This repository is not being updated temporarily. Some values of `A(a, r)` computed using a further version of my program include
 
 ```
 {(Q(0), (2P^1 P^4, 2P^5)): 2P(5),
