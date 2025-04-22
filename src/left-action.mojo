@@ -1239,6 +1239,18 @@ fn rmul(c: Int, read t: SIMD[DType.int16, 64], p: Int) -> SIMD[DType.int16, 64]:
     return r
 
 @always_inline
+fn rmul(c: Int, lc: List[SIMD[DType.int16, 64]], p: Int) -> List[SIMD[DType.int16, 64]]:
+    var r = List[SIMD[DType.int16, 64]](length=len(lc), fill=SIMD[DType.int16, 64]())
+    
+    var i = 0
+    for t in lc:
+        r[i] = t[]
+        r[i][0] = r[i][0] * c % p
+        i += 1
+
+    return r.copy()
+
+@always_inline
 fn tp_adem_free_mult(t1: SIMD[DType.int16, 64], t2: SIMD[DType.int16, 64], p: Int) -> SIMD[DType.int16, 64]:
     var t1_m1 = tp_m1(t1)
     var t1_m2 = tp_m2(t1)
@@ -2898,3 +2910,6 @@ fn milnor_basis_reduced_coproduct_as_matrix(deg: Int) -> List[List[Int]]:
     
     list_matrices.append(list_list_matr)
     return list_list_matr
+
+fn main():
+    pass
